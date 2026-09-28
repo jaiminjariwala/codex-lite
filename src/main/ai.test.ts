@@ -75,6 +75,48 @@ it('routes screenshot messages to local vision without a cloud fallback', async 
     expect(fallback).not.toHaveBeenCalled()
 })
 
+it('keeps captures on the private vision route when a question requests search', async () => {
+    const fake = makeFakeClient('Visible issue explained using [1].')
+    const searchProvider = vi.fn()
+    const ai = new GatewayAIClient({
+        textOnly: true,
+        getConfig: async () => ({ baseURL: 'http://localhost:11435/v1', model: 'text' }),
+        getApiKey: async () => null,
+        getVisionProvider: async () => ({ baseURL: 'http://localhost:11435/v1', model: 'vision', apiKey: 'local' }),
+        getSearchProvider: searchProvider,
+        createClient: () => fake.client
+    })
+    expect(await ai.complete({ summary: emptySummary, recentTurns: [userTurn('image', 'search on internet for this error', capture('data:image/png;base64,AAAA'))] })).toContain('Visible issue')
+    expect(fake.calls[0].model).toBe('vision')
+    expect(fake.calls[0].messages.some(message => Array.isArray(message.content) && message.content.some(part => part.type === 'image_url'))).toBe(true)
+    expect(searchProvider).not.toHaveBeenCalled()
+})
+
+it('does not try another provider after the user cancels', async () => {
+    const controller = new AbortController()
+    const fallbacks = vi.fn(async () => [])
+    const fake = makeFakeClient('unused')
+    fake.client.chat.completions.create = async () => {
+        controller.abort(new Error('User canceled'))
+        throw new Error('Connection stopped')
+    }
+    const ai = new GatewayAIClient({ ...makeClientOptions(fake.client), getFallbackProviders: fallbacks })
+    await expect(ai.complete({ summary: emptySummary, recentTurns: [userTurn('one', 'Hello')] }, SYSTEM_PROMPT, controller.signal)).rejects.toThrow('User canceled')
+    expect(fallbacks).not.toHaveBeenCalled()
+})
+
+it('tries the configured fallback when the primary returns whitespace', async () => {
+    const empty = makeFakeClient('   ')
+    const working = makeFakeClient('A real answer')
+    const ai = new GatewayAIClient({
+        ...makeClientOptions(empty.client),
+        getFallbackProviders: async () => [{ baseURL: 'https://fallback.example/v1', model: 'other', apiKey: 'key' }],
+        createClient: config => config.model === 'other' ? working.client : empty.client
+    })
+    expect(await ai.complete({ summary: emptySummary, recentTurns: [userTurn('one', 'Hello')] })).toBe('A real answer')
+    expect(working.calls).toHaveLength(1)
+})
+
 /** A fake chat client that records the params it received. */
 function makeFakeClient(content: string | null): {
     client: ChatClient
@@ -416,11 +458,10 @@ describe('GatewayAIClient', () => {
         expect(calls[0].messages[0]).toEqual({ role: 'system', content: SYSTEM_PROMPT })
     })
 
-    it('complete returns empty string when the gateway yields no content', async () => {
+    it('rejects an empty reply instead of saving a successful blank answer', async () => {
         const { client } = makeFakeClient(null)
         const ai = new GatewayAIClient(makeClientOptions(client))
-        const out = await ai.complete({ summary: emptySummary, recentTurns: [] })
-        expect(out).toBe('')
+        await expect(ai.complete({ summary: emptySummary, recentTurns: [] })).rejects.toThrow('empty answer')
     })
 
     it('throws a typed credentials-missing GlassError when credentials are missing', async () => {

@@ -38,7 +38,7 @@ export function PlusUpgradeModal({ onClose }: PlusUpgradeModalProps): React.JSX.
 
                 <div className="plus-plan-card__speed">
                     <span>AI providers</span>
-                    <strong>Ollama · Local Qwen Coder</strong>
+                    <strong>Ollama · Local Qwen3.5 9B</strong>
                 </div>
 
                 <button
@@ -70,7 +70,7 @@ export function PlusUpgradeModal({ onClose }: PlusUpgradeModalProps): React.JSX.
                     ))}
                 </ul>
 
-                <p className="plus-plan-card__notice">Initial Ollama and model downloads require internet and disk space. Speed and answer quality depend on your Mac. Qwen Coder handles text/code and Qwen Vision understands screenshots locally; visual automation is a separate feature. The $1/month fee is for app access. Sign-in and billing still require internet. Cancel anytime in the billing portal.</p>
+                <p className="plus-plan-card__notice">Initial Ollama and model downloads require internet and disk space. Speed and answer quality depend on your Mac. Qwen3.5 9B handles text, code, and screenshots locally; visual automation is a separate feature. Sign-in and sandbox billing require internet. The demo checkout does not charge real money.</p>
                 <p className="plus-plan-card__notice">Independent project; not affiliated with OpenAI.</p>
             </article>
         </div>,

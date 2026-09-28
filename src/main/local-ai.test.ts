@@ -34,7 +34,7 @@ it('keeps text available when the optional vision download fails and hides raw U
         throw new Error('download failed https://example.com/signed-secret')
     })
     await ai.start()
-    expect((await ai.provider()).model).toBe('qwen2.5-coder:1.5b')
+    expect((await ai.provider()).model).toBe('qwen3.5:9b')
     await expect(ai.provider(true)).rejects.toThrow('Screenshot model download failed')
     expect(ai.status().message).not.toContain('https://')
 })

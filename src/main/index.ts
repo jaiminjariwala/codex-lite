@@ -15,6 +15,7 @@ import {
 import { registerGitHubAuthIpc } from './github-auth'
 import { ManagedBackendClient } from './managed-backend'
 import { LocalAI } from './local-ai'
+import { LOCAL_MODEL } from '../shared/local-ai'
 import { WorkspaceService } from './workspace'
 import { WorkspaceAgent } from './workspace-agent'
 import { registerWorkspaceIpc } from './workspace-ipc'
@@ -380,7 +381,17 @@ app.whenReady().then(async () => {
         textOnly: true,
         getVisionProvider: () => localAI.provider(true),
         // The newer installed Qwen3 model also handles text-only research synthesis.
-        getSearchProvider: () => localAI.provider(true).catch(() => localAI.provider()),
+        // CODEX_SEARCH_MODEL overrides the synthesis model when set (e.g. to a
+        // larger pulled model such as qwen2.5:7b for better answer quality).
+        // The model must already be pulled into the app's private Ollama.
+        getSearchProvider: async () => {
+            const override = process.env.CODEX_SEARCH_MODEL?.trim()
+            if (override) {
+                const base = await localAI.provider().catch(() => null)
+                if (base) return { ...base, model: override }
+            }
+            return localAI.provider(true).catch(() => localAI.provider())
+        },
         // Signed-in release users reach the publisher-managed service first;
         // no provider key crosses into the app. Developer-owned local keys
         // remain available as an explicit fallback during backend development.
@@ -860,7 +871,7 @@ app.whenReady().then(async () => {
         await operatorServices.configStore.saveProviders({
             chain: { providerIds: ['local-ollama'] },
             providers: [{id:'local-ollama',kind:'local',baseURL:'http://127.0.0.1:11435/v1',
-                model:'qwen2.5-coder:1.5b',requiresKey:false}]
+                model:LOCAL_MODEL,requiresKey:false}]
         })
     }
     await seedOperatorProviders()

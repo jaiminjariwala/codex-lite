@@ -3,5 +3,6 @@ export interface LocalAIStatus {
     message: string
     percent?: number
 }
-export const LOCAL_MODEL = 'qwen2.5-coder:1.5b'
-export const LOCAL_VISION_MODEL = 'qwen3-vl:2b'
+// One multimodal model avoids keeping separate text and vision weights in RAM.
+export const LOCAL_MODEL = 'qwen3.5:9b'
+export const LOCAL_VISION_MODEL = LOCAL_MODEL

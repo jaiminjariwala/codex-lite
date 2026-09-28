@@ -66,7 +66,7 @@ export function Settings({ onConfigStatusChange: _onConfigStatusChange, onBack }
         </button>}
         <DockIconSettings />
         <h3 style={sectionTitle}>Local AI</h3>
-        <p style={hintStyle}>Ollama runs Qwen Coder for text and Qwen3-VL for screenshots on this Mac. Images stay local. Manage model downloads below.</p>
+        <p style={hintStyle}>Ollama runs Qwen3.5 9B for text, code, and screenshots on this Mac. Images stay local. The download is about 6.6 GB; 16 GB RAM is recommended. Manage model downloads below.</p>
         <LocalAISetup />
         <MemorySection />
     </section>

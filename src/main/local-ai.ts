@@ -13,7 +13,7 @@ const exists = async (path: string): Promise<boolean> => access(path).then(() =>
 
 /** Private, loopback-only Ollama process. Never modifies an existing installation. */
 export class LocalAI {
-    private state: LocalAIStatus = { phase: 'idle', message: 'Preparing local text and vision AI (~3 GB of models plus Ollama).' }
+    private state: LocalAIStatus = { phase: 'idle', message: 'Preparing Qwen3.5 9B for text and screenshots (~6.6 GB plus Ollama). 16 GB RAM recommended.' }
     private pending?: Promise<void>
     private abort?: AbortController
     private server?: ChildProcess
@@ -59,7 +59,7 @@ export class LocalAI {
     private async prepare(signal: AbortSignal): Promise<void> {
         if (process.platform !== 'darwin') throw new Error('Automatic local AI setup currently supports macOS only.')
         const disk = await statfs(this.root)
-        if (disk.bavail * disk.bsize < 7 * 1024 ** 3) throw new Error('Local AI needs at least 7 GB of free disk space for text and vision setup.')
+        if (disk.bavail * disk.bsize < 12 * 1024 ** 3) throw new Error('Local AI needs at least 12 GB of free disk space for Qwen3.5 setup.')
         const bundle = join(this.root, 'Ollama.app')
         let binary = '/Applications/Ollama.app/Contents/Resources/ollama'
         if (!await exists(binary)) {
@@ -90,7 +90,7 @@ export class LocalAI {
         if (!this.server) {
         this.server = spawn(binary, ['serve'], {env: {...process.env,
             OLLAMA_HOST:'127.0.0.1:11435', OLLAMA_NO_CLOUD:'1', OLLAMA_MODELS:join(this.root,'models'),
-            OLLAMA_CONTEXT_LENGTH:'8192', OLLAMA_NUM_PARALLEL:'1'
+            OLLAMA_CONTEXT_LENGTH:'4096', OLLAMA_NUM_PARALLEL:'1', OLLAMA_MAX_LOADED_MODELS:'1'
         }, stdio:'ignore'})
         this.server.on('error', error => { processError = error.message })
         this.server.on('exit', () => { this.textReady = false; this.server = undefined; if (this.state.phase === 'ready') this.update('error', 'Local AI stopped. Retry setup to restart it.') })
@@ -105,9 +105,9 @@ export class LocalAI {
         }
         if (!reachable) throw new Error('Ollama did not start. Retry setup or check macOS security permissions.')
         const tags = await fetch(LOCAL_AI_URL + '/api/tags', {signal}).then(r => r.json()) as {models?:Array<{name:string}>}
-        for (const model of [LOCAL_MODEL, LOCAL_VISION_MODEL]) {
+        for (const model of new Set([LOCAL_MODEL, LOCAL_VISION_MODEL])) {
         if (!tags.models?.some(m => m.name === model)) {
-            this.update('downloading', model === LOCAL_VISION_MODEL ? 'Downloading Qwen vision model (~1.9 GB)…' : 'Downloading Qwen Coder starter model (~986 MB)…')
+            this.update('downloading', 'Downloading Qwen3.5 9B text and screenshot model (~6.6 GB).')
             const response = await fetch(LOCAL_AI_URL + '/api/pull', {method:'POST',signal,
                 headers:{'Content-Type':'application/json'},body:JSON.stringify({model,stream:true})})
             if (!response.ok || !response.body) throw new Error('Model download failed. Retry when connected.')
@@ -138,6 +138,6 @@ export class LocalAI {
         const vision = await visionResponse.json() as { capabilities?: string[] }
         if (!vision.capabilities?.includes('vision')) throw new Error('This Ollama installation does not report vision support. Update Ollama and retry setup.')
         signal.throwIfAborted()
-        this.update('ready', 'Qwen Coder + Qwen Vision · Local AI ready')
+        this.update('ready', 'Qwen3.5 9B is ready for text and screenshots locally.')
     }
 }

@@ -47,13 +47,14 @@ async function load(): Promise<Recognizer> {
 }
 
 function getRecognizer(): Promise<Recognizer> {
-    if (!loading) loading = load()
+    if (!loading) loading = load().catch(error => { loading = null; throw error })
     return loading
 }
 
 interface InMessage {
     id: number
-    audio: Float32Array
+    kind?: 'prepare'
+    audio?: Float32Array
 }
 
 /** Strip Whisper's non-speech annotations and collapse whitespace. */
@@ -73,10 +74,17 @@ const ctx = self as unknown as {
 let chain: Promise<void> = Promise.resolve()
 
 ctx.onmessage = (e: MessageEvent<InMessage>): void => {
-    const { id, audio } = e.data
+    const { id, audio, kind } = e.data
     chain = chain.then(async () => {
         try {
             const recognize = await getRecognizer()
+            if (kind === 'prepare') {
+                // Compile kernels using synthetic silence, never microphone audio.
+                await recognize(new Float32Array(16000), { return_timestamps: false, max_new_tokens: 1 })
+                ctx.postMessage({ id, ready: true, device })
+                return
+            }
+            if (!audio) throw new Error('Missing speech audio')
             const output = (await recognize(audio, {
                 chunk_length_s: 30,
                 return_timestamps: false

@@ -44,6 +44,7 @@ export function ProjectWorkspace({ visible, artifact, onClose, width, onResize, 
     const [activity, setActivity] = useState<WorkspaceTaskEvent | null>(null)
     const [saveName, setSaveName] = useState<string | null>(null)
     const tab = tabs.find(item => item.id === active)
+    const fileView = tab?.kind === 'file' || tab?.kind === 'files'
     const tabsRef = useRef(tabs)
     const saving = useRef(false)
     const fileRequest = useRef(0)
@@ -190,7 +191,7 @@ export function ProjectWorkspace({ visible, artifact, onClose, width, onResize, 
             event.preventDefault(); event.currentTarget.setPointerCapture(event.pointerId)
         }} onPointerMove={event => { if (event.currentTarget.hasPointerCapture(event.pointerId)) onResize(Math.max(360, Math.min(window.innerWidth - 300, window.innerWidth - event.clientX))) }} />
         {tabHost ? visible && createPortal(tabStrip,tabHost) : tabStrip}
-        {tab?.kind !== 'browser' && <nav className="project-breadcrumb" aria-label="File breadcrumb"><span>{tab?.file && [root?.name ?? 'Workspace', ...tab.file.path.split('/')].map((part, index, parts) => <React.Fragment key={index}>{index > 0 && <WorkspaceIcon name="chevron" />}<span aria-current={index === parts.length - 1 ? 'page' : undefined}>{part}</span></React.Fragment>)}</span><button className="project-tree-toggle" type="button" aria-label="Toggle files tree" aria-expanded={treeOpen} title={treeOpen ? 'Collapse files tree' : 'Expand files tree'} onClick={() => setTreeOpen(value => !value)}><WorkspaceIcon name="files" /></button></nav>}
+        {fileView && <nav className="project-breadcrumb" aria-label="File breadcrumb"><span>{tab?.file && [root?.name ?? 'Workspace', ...tab.file.path.split('/')].map((part, index, parts) => <React.Fragment key={index}>{index > 0 && <WorkspaceIcon name="chevron" />}<span aria-current={index === parts.length - 1 ? 'page' : undefined}>{part}</span></React.Fragment>)}</span><button className="project-tree-toggle" type="button" aria-label="Toggle files tree" aria-expanded={treeOpen} title={treeOpen ? 'Collapse files tree' : 'Expand files tree'} onClick={() => setTreeOpen(value => !value)}><WorkspaceIcon name="files" /></button></nav>}
         {tab?.kind === 'generated' && <button onClick={() => setSaveName(`untitled.${tab.language === 'typescript' ? 'ts' : tab.language === 'python' ? 'py' : 'txt'}`)}>Save as file</button>}
         {saveName !== null && tab?.kind === 'generated' && <form className="project-save-as" onSubmit={event => {
             event.preventDefault()
@@ -205,6 +206,6 @@ export function ProjectWorkspace({ visible, artifact, onClose, width, onResize, 
             {tabs.filter(item => item.kind === 'terminal' || item.kind === 'browser').map(item => <div className="project-surface" style={{ display: active === item.id ? 'flex' : 'none' }} key={item.id}>{item.kind === 'terminal' ? <ProjectTerminal /> : item.browser && <BrowserTab tab={item.browser} active={visible && active === item.id && !menu && !browserObscured} />}</div>)}
             {tab && ['file', 'generated', 'review'].includes(tab.kind) && <Editor height="100%" key={tab.file?.path ?? tab.id} path={tab.file ? `${tab.id}/${tab.file.path}` : tab.id} theme={MONACO_THEME} beforeMount={ensureCopilotTheme} language={tab.file ? language(tab.file.path) : tab.kind === 'review' ? 'diff' : tab.language} value={tab.file ? tab.draft : tab.code} onChange={value => setTabs(previous => previous.map(item => item.id === tab.id ? { ...item, draft: value ?? '' } : item))} options={{ readOnly: tab.kind !== 'file', domReadOnly: tab.kind !== 'file', fixedOverflowWidgets: true, minimap: { enabled: false }, automaticLayout: true, fontSize: 13, padding: { top: 16 }, scrollBeyondLastLine: false, scrollbar: { verticalScrollbarSize: 6, horizontalScrollbarSize: 6, verticalSliderSize: 6, horizontalSliderSize: 6, useShadows: false } }} />}
             {(!tab || tab.kind === 'files') && <div className="project-empty"><WorkspaceIcon name="files" /><strong>Open a file</strong><p>Select a file from the workspace tree or open a project folder.</p></div>}
-        </main>{treeOpen && tab?.kind !== 'browser' && <nav className="project-tree" aria-label="Project files"><div><input placeholder="Filter files…" aria-label="Filter loaded files" value={filter} onChange={event => setFilter(event.target.value)} /></div>{renderTree()}{tree['']?.length === 0 && <p>No files yet. Ask the agent to build something here.</p>}</nav>}</div>
+        </main>{treeOpen && fileView && <nav className="project-tree" aria-label="Project files"><div><input placeholder="Filter files…" aria-label="Filter loaded files" value={filter} onChange={event => setFilter(event.target.value)} /></div>{renderTree()}{tree['']?.length === 0 && <p>No files yet. Ask the agent to build something here.</p>}</nav>}</div>
     </aside>
 }

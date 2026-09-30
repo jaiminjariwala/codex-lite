@@ -3112,11 +3112,9 @@ body.is-resizing-terminal {
     border-radius: 10px;
 }
 
-/* Running rows: sized by their two lines, with a little air below the
-   status line so it never sits flush against the pill's bottom edge. */
+/* Activity stays compact, with a single dot at the right edge. */
 .glass-history__item--running {
-    align-items: flex-start;
-    padding-block: 8px 11px;
+    align-items: center;
 }
 
 .glass-history__item:hover {
@@ -3132,8 +3130,7 @@ body.is-resizing-terminal {
 .glass-history__status {
     flex: 0 0 9px;
     width: 9px;
-    min-height: 14px;
-    padding-top: 4px;
+    align-items: center;
     display: flex;
     justify-content: center;
 }
@@ -3144,7 +3141,7 @@ body.is-resizing-terminal {
     width: 7px;
     height: 7px;
     border-radius: 50%;
-    background: #23a66f;
+    background: rgb(41, 98, 205);
     animation: glass-running-breathe 1.55s ease-in-out infinite;
 }
 

@@ -68,63 +68,6 @@ function LogoutIcon(): React.JSX.Element {
     )
 }
 
-/** Fast type/delete cycle for the active running row; static under reduced motion. */
-function useTypewriter(text: string, animate: boolean): string {
-    const [visible, setVisible] = useState(text)
-
-    useEffect(() => {
-        if (!animate || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-            setVisible(text)
-            return
-        }
-        let cancelled = false
-        let length = 0
-        let deleting = false
-        let timer: ReturnType<typeof setTimeout> | null = null
-        setVisible('')
-
-        const tick = (): void => {
-            if (cancelled) return
-            if (!deleting) {
-                length = Math.min(text.length, length + 1)
-                setVisible(text.slice(0, length))
-                if (length === text.length) {
-                    deleting = true
-                    timer = setTimeout(tick, 760)
-                } else {
-                    timer = setTimeout(tick, 18)
-                }
-                return
-            }
-            length = Math.max(0, length - 1)
-            setVisible(text.slice(0, length))
-            if (length === 0) {
-                deleting = false
-                timer = setTimeout(tick, 180)
-            } else {
-                timer = setTimeout(tick, 9)
-            }
-        }
-
-        timer = setTimeout(tick, 80)
-        return () => {
-            cancelled = true
-            if (timer) clearTimeout(timer)
-        }
-    }, [animate, text])
-
-    return visible
-}
-
-function ChatDescription({ text, animate }: { text: string; animate: boolean }): React.JSX.Element {
-    const visible = useTypewriter(text, animate)
-    return (
-        <span className={`glass-history__item-description${animate ? ' glass-history__item-description--live' : ''}`} aria-label={text}>
-            <span aria-hidden="true">{visible || '\u00a0'}</span>
-        </span>
-    )
-}
-
 function authLabel(status: GitHubAuthStatus | null): { primary: string; secondary: string } {
     if (!status) return { primary: 'GitHub account', secondary: 'Checking sign-in…' }
     if (status.state === 'signed-in') {
@@ -330,20 +273,17 @@ export function ChatSidebar({
                             onContextMenu={(event) => onChatContextMenu(event, item.id)}
                             aria-current={active ? 'page' : undefined}
                         >
-                            {isRunning && (
-                                <span className="glass-history__status">
-                                    <span className="glass-history__running-dot" title="Task running" />
-                                </span>
-                            )}
                             <span className="glass-history__text">
                                 <span className="glass-history__item-title">{item.title}</span>
-                                {isRunning && item.description && (
-                                    <ChatDescription text={item.description} animate />
-                                )}
                             </span>
                             {computerUseSessionIds.has(item.id) && <span className="glass-history__time">
                                     <span className="glass-history__capability" title="Codex Lite was used in this chat" aria-label="Codex Lite used"><BrowserUseIcon /></span>
                             </span>}
+                            {isRunning && (
+                                <span className="glass-history__status" role="status" aria-label="Task running">
+                                    <span className="glass-history__running-dot" title="Task running" />
+                                </span>
+                            )}
                         </button>
                     )
                 })}

@@ -2,6 +2,7 @@
     color-scheme: light;
     --bg: #ffffff;
     --bg-subtle: #f7f7f8;
+    --selected-chat-bg: var(--bg-subtle);
     --border: #ececef;
     --text: #1a1a1c;
     --text-dim: #6b6b73;
@@ -64,6 +65,21 @@ body {
 }
 
 /* Thin, always-visible workspace chrome. */
+.web-sources { margin: 0 0 16px; color: var(--muted, #929298); font-size: 14px; }
+.web-sources summary { display: flex; align-items: center; gap: 10px; cursor: pointer; list-style: none; }
+.web-sources summary::-webkit-details-marker { display: none; }
+.web-sources__chevron { font-size: 21px; transition: transform .15s; }
+.web-sources__card { margin-top: 14px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 14px; }
+.web-sources[open] .web-sources__chevron { transform: rotate(90deg); }
+.web-sources__query { margin: 0 0 10px; color: var(--text); }
+.web-sources__query > span { margin-right: 8px; color: var(--text-muted, #929298); }
+.glass-markdown .web-sources ul { list-style: none; margin: 10px 0 0; padding: 0; }
+.glass-markdown .web-sources li { margin: 0; padding: 0; }
+.glass-markdown .web-sources a { display: flex; align-items: center; gap: 10px; padding: 9px 8px; border-radius: 7px; color: inherit; text-decoration: none; }
+.glass-markdown .web-sources a:hover,
+.glass-markdown .web-sources a:focus-visible { color: var(--text); background: var(--selected-chat-bg); text-decoration: none; }
+.web-sources__title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.web-sources__domain { font-size: 12px; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .workspace-bar {
     -webkit-app-region: drag;
     flex: 0 0 38px;
@@ -4163,11 +4179,12 @@ body.is-resizing-terminal {
     --user-bubble: #212121;
     --code-bg: #202020;
 }
+:root[data-theme='dark'] { --selected-chat-bg: #353535; }
 :root[data-theme='dark'] .glass-nav { background: #111111; }
 :root[data-theme='dark'] .environment-card,
 :root[data-theme='dark'] .environment-sidebar { background: #1f1f1f; }
 :root[data-theme='dark'] .glass-history__item--selected,
-:root[data-theme='dark'] .glass-history__item--selected:hover { background: #353535; }
+:root[data-theme='dark'] .glass-history__item--selected:hover { background: var(--selected-chat-bg); }
 :root[data-theme='dark'] .glass-main,
 :root[data-theme='dark'] .glass-conversation { background: #151515; }
 :root[data-theme='dark'] .workspace-bar { background: #151515; }

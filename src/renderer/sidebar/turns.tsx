@@ -4,6 +4,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { SessionSummary, TurnView } from '@shared/types'
 import { CodeMarkdown } from './CodeBlock'
+import { webSources } from './web-sources'
 
 /** Presentation of individual chat turns and the running goal tracker. */
 
@@ -16,8 +17,9 @@ const MARKDOWN_COMPONENTS = {
 
 /** Render assistant text as Markdown; user text stays plain. */
 const revealedTurns = new Set<string>()
-export function TurnBody({ turn, animate = false }: { turn: TurnView; animate?: boolean }): React.JSX.Element {
-    const text = turn.text ?? ''
+export function TurnBody({ turn, animate = false, query }: { turn: TurnView; animate?: boolean; query?: string }): React.JSX.Element {
+    const presentation = turn.role === 'assistant' ? webSources(turn.text ?? '') : { text: turn.text ?? '', sources: [] }
+    const text = presentation.text
     const [shouldReveal] = useState(() => animate && !revealedTurns.has(turn.id))
     const [visible, setVisible] = useState(shouldReveal ? 0 : text.length)
     useEffect(() => {
@@ -38,6 +40,13 @@ export function TurnBody({ turn, animate = false }: { turn: TurnView; animate?: 
     if (turn.role === 'assistant') {
         return (
             <div className={`glass-markdown${visible < text.length ? ' glass-markdown--revealing' : ''}`}>
+                {presentation.sources.length > 0 && <details className="web-sources">
+                    <summary>Searched the web <span className="web-sources__chevron" aria-hidden="true">›</span></summary>
+                    <div className="web-sources__card">
+                        {query && <div className="web-sources__query"><span>Searched the web</span> {query}</div>}
+                        <ul>{presentation.sources.map(source => <li key={source.url}><a href={source.url} target="_blank" rel="noopener noreferrer"><span className="web-sources__title">{source.title}</span><span className="web-sources__domain">{source.domain}</span></a></li>)}</ul>
+                    </div>
+                </details>}
                 <ReactMarkdown remarkPlugins={[remarkGfm]} components={MARKDOWN_COMPONENTS}>
                     {text.slice(0, visible)}
                 </ReactMarkdown>

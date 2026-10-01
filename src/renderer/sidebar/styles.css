@@ -81,7 +81,7 @@ body {
 .web-sources__title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .web-sources__domain { font-size: 12px; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .workspace-bar {
-    -webkit-app-region: drag;
+    -webkit-app-region: no-drag;
     flex: 0 0 38px;
     min-height: 38px;
     display: flex;
@@ -97,7 +97,7 @@ body {
 .workspace-bar__actions { display: flex; align-items: center; gap: 5px; }
 .workspace-bar__left { min-width: 0; }
 .workspace-bar__right { display:flex;align-items:center;flex:0 0 auto;min-width:0; }
-.workspace-bar__right--project { min-width:360px;margin-right:-8px;padding-right:8px;border-left:1px solid var(--border);box-sizing:border-box; }
+.workspace-bar__right--project { min-width:260px;margin-right:-8px;padding-right:8px;border-left:1px solid var(--border);box-sizing:border-box; }
 .workspace-bar__tab-host { display:none;flex:1;min-width:0; }
 .workspace-bar__right--project .workspace-bar__tab-host { display:block; }
 .workspace-bar__actions { flex:0 0 auto; }
@@ -108,13 +108,13 @@ body {
     .glass-app--codeopen:not(.glass-app--navhidden) .glass-workspace { overflow: visible; }
     .glass-app--codeopen:not(.glass-app--navhidden) .workspace-bar {
         background: transparent;
-        pointer-events: none;
+        pointer-events: auto;
         -webkit-app-region: no-drag;
     }
     .glass-app--codeopen:not(.glass-app--navhidden) .workspace-bar__left,
     .glass-app--codeopen:not(.glass-app--navhidden) .workspace-bar__right {
         pointer-events: auto;
-        -webkit-app-region: drag;
+        -webkit-app-region: no-drag;
         background: var(--app-bg);
         height: 38px;
     }
@@ -4176,10 +4176,10 @@ body.is-resizing-terminal {
     --user-bubble: #212121;
     --code-bg: #202020;
 }
-:root[data-theme='dark'] { --selected-chat-bg: #353535; }
 :root[data-theme='dark'] .glass-nav { background: #111111; }
 :root[data-theme='dark'] .environment-card,
 :root[data-theme='dark'] .environment-sidebar { background: #1f1f1f; }
+:root[data-theme='dark'] { --selected-chat-bg: #353535; }
 :root[data-theme='dark'] .glass-history__item--selected,
 :root[data-theme='dark'] .glass-history__item--selected:hover { background: var(--selected-chat-bg); }
 :root[data-theme='dark'] .glass-main,

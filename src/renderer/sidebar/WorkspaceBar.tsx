@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { getTheme, setTheme } from './theme'
 
 function PanelIcon({ side }: { side: 'left' | 'right' | 'bottom' }): React.JSX.Element {
@@ -30,13 +30,29 @@ export function WorkspaceBar({
     tabHostRef?: (node: HTMLDivElement | null) => void
 }): React.JSX.Element {
     const [appearance, setAppearance] = useState(getTheme)
+    const drag = useRef<{ x: number; y: number } | null>(null)
+    const isControl = (target: EventTarget): boolean => target instanceof Element && !!target.closest('button,input,a,[role="tab"],[role="menu"]')
     useEffect(() => {
         const update = (): void => setAppearance(getTheme())
         window.addEventListener('desktop-theme-change', update)
         return () => window.removeEventListener('desktop-theme-change', update)
     }, [])
     return (
-        <header className="workspace-bar">
+        <header className="workspace-bar"
+            onDoubleClick={event => { if (!isControl(event.target)) void window.glass.toggleWindowMaximize?.() }}
+            onPointerDown={event => {
+                if (event.button !== 0 || isControl(event.target)) return
+                drag.current = { x: event.screenX, y: event.screenY }
+                event.currentTarget.setPointerCapture(event.pointerId)
+            }}
+            onPointerMove={event => {
+                if (!drag.current) return
+                const dx = event.screenX - drag.current.x, dy = event.screenY - drag.current.y
+                drag.current = { x: event.screenX, y: event.screenY }
+                if (dx || dy) void window.glass.moveWindow?.(dx, dy)
+            }}
+            onPointerUp={() => { drag.current = null }}
+            onPointerCancel={() => { drag.current = null }}>
             <div className="workspace-bar__left">
                 <button type="button" className="workspace-bar__nav-toggle" onClick={onToggleNav} aria-label="Toggle chat sidebar" title="Toggle chat sidebar">
                     <PanelIcon side="left" />

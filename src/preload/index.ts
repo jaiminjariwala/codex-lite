@@ -48,6 +48,8 @@ function subscribe<Args extends unknown[]>(
 
 const bridge: GlassBridge = {
     ready: true,
+    toggleWindowMaximize: () => ipcRenderer.invoke('window:toggle-maximize'),
+    moveWindow: (dx, dy) => ipcRenderer.invoke('window:move', dx, dy),
 
     // Sidebar -> main
     sendMessage: (text: string): Promise<void> => ipcRenderer.invoke('chat:send', { text }),

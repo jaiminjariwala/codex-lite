@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from
 import { LocalAISetup } from './LocalAISetup'
 import { followConversation } from './conversation-follow'
 import { RollingBall } from './RollingBall'
+import { fitPanelWidth } from './panel-layout'
 import type { ConfigStatus, GitHubAuthStatus, GlassError, SessionListItem, SessionSummary, SessionView, TurnCapture, TurnView, WorkspaceContext } from '@shared/types'
 import type { ConfirmationRequest, LoopStateView, Playbook } from '@op-shared/types'
 import type { SelectedEmail } from '@shared/types'
@@ -128,7 +129,7 @@ export function App(): React.JSX.Element {
     }, [])
     // User-draggable width of the right code panel (persists while open).
     const [codePanelWidth, setCodePanelWidth] = useState(() =>
-        Math.min(820, Math.max(480, Math.round(window.innerWidth * 0.48)))
+        Math.max(260, Math.round((window.innerWidth - 296) / 2))
     )
     // Set while the on-device model downloads on first use (one-time), so the
     // wait shows a friendly status instead of looking like a hang.
@@ -149,6 +150,14 @@ export function App(): React.JSX.Element {
         const saved = Number(localStorage.getItem('chat-sidebar-width'))
         return Number.isFinite(saved) && saved >= 230 && saved <= 420 ? saved : 296
     })
+
+    const [viewportWidth, setViewportWidth] = useState(window.innerWidth)
+    useEffect(() => {
+        const resize = (): void => setViewportWidth(window.innerWidth)
+        window.addEventListener('resize', resize)
+        return () => window.removeEventListener('resize', resize)
+    }, [])
+    const panelWidth = fitPanelWidth(codePanelWidth, viewportWidth, navOpen && viewportWidth > NAV_OVERLAY_BREAKPOINT ? navWidth : 0)
 
     // This is deliberately task-scoped. Never point the product UI at this
     // application's own development repository: Changes is populated only by
@@ -1532,6 +1541,8 @@ export function App(): React.JSX.Element {
         return () => window.removeEventListener('keydown', onKey)
     }, [])
 
+    const environmentVisible = workspaceMode && rightPanelOpen && !projectOpen && !codeArtifact && !inspectorArtifact
+
     return (
         <CodePanelContext.Provider value={codePanelApi}>
             {accessDialogOpen && <PlusUpgradeModal onClose={() => setAccessDialogOpen(false)} />}
@@ -1541,9 +1552,9 @@ export function App(): React.JSX.Element {
             >
                 <div className="glass-upper-workspace">
                     <WorkspaceBar
-                        projectWidth={projectOpen || codeArtifact ? codePanelWidth : undefined}
+                        projectWidth={projectOpen || codeArtifact ? panelWidth : undefined}
                         tabHostRef={setProjectTabHost}
-                        rightOpen={rightPanelOpen || projectOpen || !!codeArtifact || !!inspectorArtifact}
+                        rightOpen={!!environmentVisible || projectOpen || !!codeArtifact || !!inspectorArtifact}
                         terminalOpen={terminalOpen}
                         onToggleNav={() => setNavOpen((open) => !open)}
                         onToggleRight={() => {
@@ -1552,19 +1563,21 @@ export function App(): React.JSX.Element {
                                 setCodeArtifact(null)
                                 setInspectorArtifact(null)
                                 setRightPanelOpen(true)
-                            } else {
+                            } else if (workspaceMode) {
                                 setRightPanelOpen((open) => !open)
+                            } else {
+                                setProjectOpen(true)
                             }
                         }}
                         onToggleTerminal={() => setTerminalOpen((open) => !open)}
                     />
                 <div
-                    className={`glass-workspace${rightPanelOpen && !projectOpen && !codeArtifact && !inspectorArtifact ? ' glass-workspace--environment-open' : ''}`}
+                    className={`glass-workspace${environmentVisible ? ' glass-workspace--environment-open' : ''}`}
                 >
                 <ChatSidebar
                     items={shownHistory}
                     activeId={currentItem?.id ?? null}
-                    running={conv.pending}
+                    running={conv.pending || projectRunning || thinkingIds.length > 0}
                     computerUseSessionIds={computerUseSessionIds}
                     settingsOpen={showSettings}
                     onNewSession={onNewSession}
@@ -1760,15 +1773,15 @@ export function App(): React.JSX.Element {
                                                     alt="Captured screen region"
                                                 />
                                             )}
-                                            {turn.text && <TurnBody turn={turn} animate={freshAnswers.includes(turn.id)} />}
+                                            {turn.text && <TurnBody turn={turn} query={conv.turns.slice(0, turnIndex).reverse().find(item => item.role === 'user')?.text} animate={freshAnswers.includes(turn.id)} />}
                                         </div>
                                     </div>
                                     {/* This question is still thinking: its own
                                     indicator + a Cancel for exactly this one. */}
                                     {!operatorMode && turn.role === 'user' && thinkingIds.includes(turn.id) && (
                                         <div className="glass-row glass-row--assistant">
-                                            <div className="glass-pending glass-pending--perquestion" role="status" aria-label="Thinking about this question">
-                                                <RollingBall />{searching && <span role="status">Searching…</span>}
+                                            <div className="glass-pending glass-pending--perquestion" role="status" aria-label={searching ? 'Searching the internet' : 'Thinking about this question'}>
+                                                <RollingBall rolling /><span className="glass-pending__label">{searching ? 'Searching the web…' : 'Thinking…'}</span>
                                                 <button
                                                     type="button"
                                                     className="glass-pending__cancel"
@@ -1802,8 +1815,8 @@ export function App(): React.JSX.Element {
                                     (t) => t.role === 'user' && thinkingIds.includes(t.id)
                                 ) && (
                                     <div className="glass-row glass-row--assistant">
-                                        <div className="glass-pending" role="status" aria-label="Glass is thinking">
-                                            <RollingBall />{searching && <span role="status">Searching…</span>}
+                                        <div className="glass-pending" role="status" aria-label={searching ? 'Searching the internet' : 'Thinking'}>
+                                            <RollingBall rolling /><span className="glass-pending__label">{searching ? 'Searching the web…' : 'Thinking…'}</span>
                                         </div>
                                     </div>
                                 )}
@@ -2117,18 +2130,18 @@ export function App(): React.JSX.Element {
                         browserObscured={showSettings}
                         artifact={codeArtifact}
                         onClose={() => { setCodeArtifact(null); setProjectOpen(false) }}
-                        width={codePanelWidth}
+                        width={panelWidth}
                         onResize={setCodePanelWidth}
                     />
                 {inspectorArtifact && (
                     <InspectorPanel
                         artifact={inspectorArtifact}
                         onClose={() => { setInspectorArtifact(null); setRightPanelOpen(true) }}
-                        width={codePanelWidth}
+                        width={panelWidth}
                         onResize={setCodePanelWidth}
                     />
                 )}
-                {rightPanelOpen && !projectOpen && !codeArtifact && !inspectorArtifact && (
+                {environmentVisible && (
                     <aside className="environment-sidebar" aria-label="Environment panel">
                         <EnvironmentMenu
                             workspace={taskWorkspaceContext}

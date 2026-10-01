@@ -325,6 +325,8 @@ export interface GlassError {
 export interface GlassBridge {
     /** Sentinel the renderer can check to confirm the bridge was injected. */
     ready: boolean
+    toggleWindowMaximize(): Promise<void>
+    moveWindow(dx: number, dy: number): Promise<void>
 
     // Sidebar -> main
     /** Send a typed chat message (Req 2.2, 3.1). */

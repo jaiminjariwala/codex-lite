@@ -290,6 +290,21 @@ app.whenReady().then(async () => {
     }
 
     stopDockAnimation = registerDockSettings(() => mainWindow)
+    const trustedWindow = (event: Electron.IpcMainInvokeEvent): BrowserWindow => {
+        if (!mainWindow || event.sender !== mainWindow.webContents || event.senderFrame !== event.sender.mainFrame) throw new Error('Untrusted window request')
+        return mainWindow
+    }
+    ipcMain.handle('window:toggle-maximize', event => {
+        const window = trustedWindow(event)
+        if (window.isMaximized()) window.unmaximize()
+        else window.maximize()
+    })
+    ipcMain.handle('window:move', (event, dx: number, dy: number) => {
+        const window = trustedWindow(event)
+        if (![dx, dy].every(value => Number.isFinite(value) && Math.abs(value) <= 1000) || window.isMaximized() || window.isFullScreen()) return
+        const [x, y] = window.getPosition()
+        window.setPosition(Math.round(x + dx), Math.round(y + dy))
+    })
 
     // Allow camera/microphone and clipboard WRITES only for the trusted
     // sidebar renderer. Dictation requests audio; the local video recorder

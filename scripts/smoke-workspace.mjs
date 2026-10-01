@@ -13,12 +13,16 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { ProjectWorkspace } from '/src/renderer/sidebar/ProjectWorkspace';
 import { PlusUpgradeModal } from '/src/renderer/sidebar/PlusUpgradeModal';
+import { ChatSidebar } from '/src/renderer/sidebar/ChatSidebar';
+import { WorkspaceBar } from '/src/renderer/sidebar/WorkspaceBar';
+import { TurnBody } from '/src/renderer/sidebar/turns';
+import { fitPanelWidth } from '/src/renderer/sidebar/panel-layout';
 import { followConversation } from '/src/renderer/sidebar/conversation-follow';
 import '/src/renderer/sidebar/styles.css';
 const files = {'src/main.ts': {path:'src/main.ts', content:'export const rocket = "Ready for launch";\\n', revision:'1'}, 'README.md': {path:'README.md', content:'# Rocket workspace', revision:'1'}};
 let listener = () => {};
 window.testFollow=followConversation;
-window.glass = {startPlusCheckout:async()=>{throw new Error('Sandbox checkout unavailable')}};
+window.glass = {startPlusCheckout:async()=>{throw new Error('Sandbox checkout unavailable')}, getGitHubAuthStatus:async()=>({state:'signed-in',user:{login:'demo',name:'Demo user'}}), onGitHubAuthChanged:()=>()=>{}, getManagedAccountStatus:async()=>({configured:true,authenticated:true})};
 window.showAccess=()=>{const host=document.createElement('div');document.body.append(host);const root=createRoot(host);root.render(<PlusUpgradeModal onClose={()=>root.unmount()}/>)};
 window.workspace = {
  root: async () => ({path:'/fixture/Rocket',name:'Rocket'}),
@@ -41,7 +45,7 @@ window.browserWorkspace={
  close:async()=>{browserTabs=[];browserListener({tabs:[],selectedId:null})},
  present:async(id,bounds)=>{window.browserBounds=bounds},action:async()=>{},onChanged:cb=>{browserListener=cb;return()=>{}},onFocusAddress:()=>()=>{}
 };
-createRoot(document.getElementById('root')).render(<div style={{display:'flex',height:'100vh'}}><div style={{flex:1,padding:40}}>Chat stays beside the project.</div><ProjectWorkspace visible artifact={null} onClose={()=>{}} width={850} onResize={()=>{}} /></div>);
+function Fixture(){const [artifact,setArtifact]=React.useState(null); window.showGenerated=()=>setArtifact({code:'print("Hello")',language:'python',title:'Example code'}); return <div className="glass-app"><WorkspaceBar rightOpen terminalOpen={false} onToggleNav={()=>{}} onToggleRight={()=>{}} onToggleTerminal={()=>{}} /><div className="glass-workspace"><ChatSidebar items={[{id:'demo',title:'Sample question',description:'Thinking through your request…'}]} activeId="demo" running={true} computerUseSessionIds={new Set()} settingsOpen={false} onNewSession={()=>{}} onOpenSession={()=>{}} onChatContextMenu={()=>{}} onToggleSettings={()=>{}} /><main className="glass-main">Chat stays beside the project.<TurnBody turn={{id:"answer",role:"assistant",text:"A sourced answer [1](https://example.org/fact).\\n\\n<!-- web-sources -->\\n- [Example fact](https://example.org/fact)"}} query="Sample question"/></main><ProjectWorkspace visible artifact={artifact} onClose={()=>{}} width={fitPanelWidth(570,window.innerWidth,296)} onResize={()=>{}} /></div></div>}; createRoot(document.getElementById('root')).render(<Fixture/>);
 `
 const server = await createServer({
     configFile: false,
@@ -69,6 +73,39 @@ try {
     const errors = []
     page.on('pageerror', error => errors.push(error.message))
     await page.goto(`${server.resolvedUrls.local[0]}workspace-smoke.html`)
+    await page.getByRole('status', {name:'Task running'}).waitFor()
+    await page.evaluate(()=>{window.glass.toggleWindowMaximize=async()=>{window.zoomed=(window.zoomed||0)+1};window.glass.moveWindow=async()=>{}})
+    await page.locator('.workspace-bar').dblclick({position:{x:400,y:20}})
+    assert.equal(await page.evaluate(()=>window.zoomed),1)
+    await page.locator('.web-sources summary').click()
+    await page.getByRole('link',{name:'Example fact example.org',exact:false}).waitFor()
+    assert.equal(await page.locator('.web-sources__icon').count(),0)
+    assert.equal(await page.locator('.web-sources summary').evaluate(node=>getComputedStyle(node.parentElement).borderTopWidth),'0px')
+    const source=page.locator('.web-sources a').first()
+    await source.hover()
+    assert.equal(await source.evaluate(node=>getComputedStyle(node).textDecorationLine),'none')
+    assert.equal(await source.evaluate(node=>getComputedStyle(node).backgroundColor),await page.locator('.glass-history__item--selected').evaluate(node=>getComputedStyle(node).backgroundColor))
+    assert.equal(await page.locator('.glass-main a').count(),1)
+    await page.locator('.web-sources summary').click()
+    const chatBox=await page.locator('.glass-main').boundingBox()
+    assert.ok(chatBox.width>=400)
+    assert.equal(await page.locator('.glass-history__item-description').count(),0)
+    const dot = page.locator('.glass-history__running-dot')
+    assert.equal(await dot.evaluate(node=>getComputedStyle(node).backgroundColor),'rgb(41, 98, 205)')
+    const titleBox = await page.locator('.glass-history__item-title').boundingBox()
+    const dotBox = await dot.boundingBox()
+    assert.ok(dotBox.x > titleBox.x + titleBox.width)
+    assert.equal(await page.getByRole('navigation',{name:'Project files'}).count(),0)
+    await page.evaluate(()=>window.showGenerated())
+    await page.getByRole('tab',{name:'Example code'}).waitFor()
+    assert.equal(await page.getByRole('navigation',{name:'Project files'}).count(),0)
+    assert.equal(await page.getByRole('button',{name:'Toggle files tree'}).count(),0)
+    await page.getByRole('button',{name:'Close Example code'}).click()
+    await page.getByRole('button',{name:'Add workspace tab'}).click()
+    await page.getByRole('menuitem').filter({hasText:'Files'}).click()
+    await page.getByRole('navigation',{name:'Project files'}).waitFor()
+    await page.evaluate(()=>{document.documentElement.dataset.theme='light'})
+    await page.screenshot({path:resolve(tmpdir(),'codex-lite-restored-light.png')})
     await page.getByTitle('src', {exact:true}).click()
     await page.getByTitle('src/main.ts', {exact:true}).click()
     await page.locator('.monaco-editor textarea').waitFor()

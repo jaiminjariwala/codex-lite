@@ -5,6 +5,7 @@
     --onboarding-blue: rgb(41,98,205);
 }
 .onboarding--permissions { background: #f3f4f5; }
+.onboarding.onboarding--permissions p { color: rgb(105,107,110); }
 .onboarding__titlebar { position: absolute; top: 0; left: 0; right: 0; height: 38px; -webkit-app-region: drag; }
 .onboarding__back { position: absolute; top: 46px; left: 32px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 0; background: transparent; color: rgb(40,40,40); width: 44px; height: 44px; box-shadow: none; cursor: pointer; }
 .onboarding__back svg { width: 24px; height: 24px; }
@@ -49,10 +50,11 @@
 .onboarding__permission-row > svg { width: 24px; height: 28px; flex-shrink: 0; color: #777; }
 .onboarding__permission-row > span:not(.onboarding__check):not(.onboarding__access-icon) { flex: 1; }
 .onboarding__permission-row strong { display: block; font-size: 16px; font-weight: 550; }
-.onboarding__permission-row small { display: block; color: rgb(191,208,240); font-size: 13px; line-height: 1.4; margin-top: 4px; }
+.onboarding__permission-row small { display: block; color: rgb(105,107,110); font-size: 13px; line-height: 1.4; margin-top: 4px; }
 .onboarding__access-icon { width: 24px; color: #777; }
 .onboarding__allow { border: 0; border-radius: 999px; background: var(--onboarding-blue); color: white; padding: 8px 14px; font-size: 15px; }
-.onboarding__check { width: 20px; height: 20px; border-radius: 50%; background: green; color: white; text-align: center; font-size: 14px; }
+.onboarding__check { display: grid; place-items: center; flex-shrink: 0; width: 22px; height: 22px; border-radius: 50%; background: var(--onboarding-blue); color: white; }
+.onboarding__check svg { width: 14px; height: 14px; }
 .onboarding__skip { color: rgb(17,17,18); }
 .onboarding__finish { max-width: 220px; }
 .onboarding__dots { display: flex; justify-content: center; gap: 8px; margin-top: 24px; }

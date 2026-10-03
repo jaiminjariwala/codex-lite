@@ -103,7 +103,7 @@ export function FirstRunOnboarding({ openRequested, onDismiss, onAuth, onVisible
             else if (step === 'microphone') setStep('accounts')
             else if (step === 'accounts' && snapshot?.activeId && snapshot.onboardingComplete) close()
             else setStep('login')
-        }}>←</button>}
+        }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M19 12H5m7-7-7 7 7 7" /></svg></button>}
         <div className="onboarding__content">
             {permission ? <span className="onboarding__mic"><MicrophoneIcon /></span> : <img className="onboarding__ball" src={blueBall} alt="Codex Lite" />}
             {step === 'loading' && <h1>Welcome to Codex Lite</h1>}

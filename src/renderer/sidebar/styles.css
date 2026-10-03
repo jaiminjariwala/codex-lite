@@ -97,7 +97,7 @@ body {
 .workspace-bar__actions { display: flex; align-items: center; gap: 5px; }
 .workspace-bar__left { min-width: 0; }
 .workspace-bar__right { display:flex;align-items:center;flex:0 0 auto;min-width:0; }
-.workspace-bar__right--project { min-width:260px;margin-right:-8px;padding-right:8px;border-left:1px solid var(--border);box-sizing:border-box; }
+.workspace-bar__right--project { min-width:260px;margin-right:-8px;padding-right:8px;border-left:.5px solid var(--border);box-sizing:border-box; }
 .workspace-bar__tab-host { display:none;flex:1;min-width:0; }
 .workspace-bar__right--project .workspace-bar__tab-host { display:block; }
 .workspace-bar__actions { flex:0 0 auto; }

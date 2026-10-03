@@ -1,4 +1,4 @@
-.project-workspace{position:relative;flex:0 0 auto;flex-direction:column;min-width:260px;min-height:0;background:var(--bg,#fff);color:var(--text,#242424);border-left:1px solid #e5e5e8;overflow:visible}
+.project-workspace{position:relative;flex:0 0 auto;flex-direction:column;min-width:260px;min-height:0;background:var(--bg,#fff);color:var(--text,#242424);border-left:.5px solid #e5e5e8;overflow:visible}
 .project-workspace button,.project-tabs button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;border-radius:8px;padding:7px 10px}
 .project-workspace button:hover,.project-tabs button:hover{background:#8881}
 .project-resizer{position:absolute;left:-4px;top:0;bottom:0;width:8px;cursor:col-resize;z-index:4;touch-action:none}

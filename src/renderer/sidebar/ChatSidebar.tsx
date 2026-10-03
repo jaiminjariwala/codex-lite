@@ -2,10 +2,8 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
 import type {
     GitHubAuthStatus,
     GitHubDeviceChallenge,
-    ManagedAccountStatus,
     SessionListItem
 } from '@shared/types'
-import { PlusUpgradeModal } from './PlusUpgradeModal'
 
 interface ChatSidebarProps {
     items: SessionListItem[]
@@ -17,6 +15,7 @@ interface ChatSidebarProps {
     onOpenSession: (id: string) => void
     onChatContextMenu: (event: React.MouseEvent, id: string) => void
     onToggleSettings: () => void
+    onShowAccounts?: () => void
     onAuthStatusChange?: (status: GitHubAuthStatus) => void
 }
 
@@ -49,16 +48,6 @@ function SettingsIcon(): React.JSX.Element {
     )
 }
 
-function UsageIcon(): React.JSX.Element {
-    return (
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
-            <path d="M4.2 15.7a8.5 8.5 0 1 1 15.6 0" />
-            <path d="m12 12 4.3-3.1" />
-            <circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none" />
-        </svg>
-    )
-}
-
 function LogoutIcon(): React.JSX.Element {
     return (
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -69,7 +58,7 @@ function LogoutIcon(): React.JSX.Element {
 }
 
 function authLabel(status: GitHubAuthStatus | null): { primary: string; secondary: string } {
-    if (!status) return { primary: 'GitHub account', secondary: 'Checking sign-in…' }
+    if (!status) return { primary: 'Account', secondary: 'Checking sign-in…' }
     if (status.state === 'signed-in') {
         return status.user
             ? {
@@ -82,7 +71,7 @@ function authLabel(status: GitHubAuthStatus | null): { primary: string; secondar
         return { primary: 'Finish GitHub sign-in', secondary: status.message ?? 'Waiting for approval…' }
     }
     if (status.state === 'unconfigured') {
-        return { primary: 'Log in or sign up', secondary: 'Continue with GitHub' }
+        return { primary: 'Log in or sign up', secondary: 'Continue with email or GitHub' }
     }
     if (status.state === 'error') {
         return { primary: 'Try GitHub sign-in again', secondary: status.message ?? 'Connection failed' }
@@ -100,22 +89,18 @@ export function ChatSidebar({
     onOpenSession,
     onChatContextMenu,
     onToggleSettings,
-    onAuthStatusChange
+    onAuthStatusChange,
+    onShowAccounts
 }: ChatSidebarProps): React.JSX.Element {
     const [authStatus, setAuthStatus] = useState<GitHubAuthStatus | null>(null)
     const [challenge, setChallenge] = useState<GitHubDeviceChallenge | null>(null)
     const [authBusy, setAuthBusy] = useState(false)
     const [copied, setCopied] = useState(false)
     const [accountMenuOpen, setAccountMenuOpen] = useState(false)
-    const [upgradeOpen, setUpgradeOpen] = useState(false)
-    const [managedStatus, setManagedStatus] = useState<ManagedAccountStatus | null>(null)
     const accountMenuRef = useRef<HTMLDivElement>(null)
 
     useEffect(() => {
         if (!accountMenuOpen) return
-        void window.glass.getManagedAccountStatus().then(setManagedStatus).catch(() => {
-            setManagedStatus({ configured: true, authenticated: false, message: 'Usage is temporarily unavailable.' })
-        })
         const closeOnOutsideClick = (event: MouseEvent): void => {
             if (!accountMenuRef.current?.contains(event.target as Node)) {
                 setAccountMenuOpen(false)
@@ -140,17 +125,20 @@ export function ChatSidebar({
             onAuthStatusChange?.(status)
             if (status.state !== 'authorizing') setChallenge(null)
         }
-        void window.glass.getGitHubAuthStatus().then(apply).catch(() => {
+        void (window.glass.accountAuth ? window.glass.accountAuth({ action: 'status' }).then(s => s.auth) : window.glass.getGitHubAuthStatus()).then(apply).catch(() => {
             apply({ state: 'error', message: 'GitHub sign-in status is unavailable.' })
         })
-        const unsubscribe = window.glass.onGitHubAuthChanged(apply)
+        const unsubscribe = window.glass.onGitHubAuthChanged(() => { void (window.glass.accountAuth ? window.glass.accountAuth({ action: 'status' }).then(s => s.auth) : window.glass.getGitHubAuthStatus()).then(apply).catch(() => undefined) })
+        const unsubscribeAccount = window.glass.onAccountChanged?.(status => apply(status.auth))
         return () => {
             mounted = false
             unsubscribe()
+            unsubscribeAccount?.()
         }
     }, [onAuthStatusChange])
 
     const beginGitHubLogin = useCallback(() => {
+        if (onShowAccounts) { onShowAccounts(); return }
         if (authBusy) return
         setAuthBusy(true)
         setCopied(false)
@@ -192,12 +180,11 @@ export function ChatSidebar({
                 })
             })
             .finally(() => setAuthBusy(false))
-    }, [authBusy])
+    }, [authBusy, onShowAccounts])
 
     const logout = useCallback(() => {
         setAuthBusy(true)
-        void window.glass
-            .logoutGitHub()
+        void (window.glass.accountAuth ? window.glass.accountAuth({ action: 'logout' }) : window.glass.logoutGitHub())
             .then(() => {
                 setChallenge(null)
                 setAuthStatus({ state: 'signed-out' })
@@ -235,12 +222,6 @@ export function ChatSidebar({
     const account = authLabel(authStatus)
     const signedIn = authStatus?.state === 'signed-in'
     const accountInitial = account.primary.trim().charAt(0).toUpperCase() || 'U'
-    const managedUsage = managedStatus?.usage
-    const isPlus = managedUsage?.plan === 'plus'
-    const remainingPercent = managedUsage && managedUsage.limit_units > 0
-        ? Math.max(0, Math.round((managedUsage.remaining_units / managedUsage.limit_units) * 100))
-        : null
-
     return (
         <aside className="glass-nav glass-nav--open" aria-label="Conversation sidebar">
             <div className="glass-nav__brand-row">
@@ -253,7 +234,7 @@ export function ChatSidebar({
                     className="glass-nav__new"
                     onClick={signedIn ? onNewSession : beginGitHubLogin}
                     disabled={authBusy || authStatus?.state === 'authorizing'}
-                    title={signedIn ? 'Start a new chat' : 'Sign in with GitHub to start a chat'}
+                    title={signedIn ? 'Start a new chat' : 'Sign in to start a chat'}
                 >
                     <NewChatIcon />
                     <span>New chat</span>
@@ -304,6 +285,7 @@ export function ChatSidebar({
                 )}
                 {accountMenuOpen && (
                     <div className="glass-account-menu" role="menu" aria-label="Account menu">
+                        {onShowAccounts && <button type="button" className="glass-account-menu__item" onClick={() => { setAccountMenuOpen(false); onShowAccounts() }}>Accounts</button>}
                         <div className="glass-account-menu__identity">
                             {authStatus?.user?.avatarUrl ? (
                                 <img src={authStatus.user.avatarUrl} alt="" />
@@ -312,18 +294,6 @@ export function ChatSidebar({
                             )}
                             <span>{account.primary}</span>
                         </div>
-                        <button
-                            type="button"
-                            className="glass-account-menu__item glass-account-menu__usage"
-                            onClick={() => {
-                                setAccountMenuOpen(false)
-                                if (isPlus) void window.glass.openBillingPortal()
-                                else setUpgradeOpen(true)
-                            }}
-                        >
-                            <span className="glass-account-menu__icon"><UsageIcon /></span>
-                            <span>{isPlus ? 'Manage subscription' : 'Upgrade'}</span>
-                        </button>
                         <button
                             type="button"
                             className={`glass-account-menu__item${settingsOpen ? ' is-selected' : ''}`}
@@ -369,7 +339,6 @@ export function ChatSidebar({
                     </button>
                 </div>
             </div>
-            {upgradeOpen && <PlusUpgradeModal onClose={() => setUpgradeOpen(false)} />}
         </aside>
     )
 }

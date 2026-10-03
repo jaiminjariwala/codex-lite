@@ -12,7 +12,6 @@ const fixture = `
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { ProjectWorkspace } from '/src/renderer/sidebar/ProjectWorkspace';
-import { PlusUpgradeModal } from '/src/renderer/sidebar/PlusUpgradeModal';
 import { ChatSidebar } from '/src/renderer/sidebar/ChatSidebar';
 import { WorkspaceBar } from '/src/renderer/sidebar/WorkspaceBar';
 import { TurnBody } from '/src/renderer/sidebar/turns';
@@ -22,8 +21,7 @@ import '/src/renderer/sidebar/styles.css';
 const files = {'src/main.ts': {path:'src/main.ts', content:'export const rocket = "Ready for launch";\\n', revision:'1'}, 'README.md': {path:'README.md', content:'# Rocket workspace', revision:'1'}};
 let listener = () => {};
 window.testFollow=followConversation;
-window.glass = {startPlusCheckout:async()=>{throw new Error('Sandbox checkout unavailable')}, getGitHubAuthStatus:async()=>({state:'signed-in',user:{login:'demo',name:'Demo user'}}), onGitHubAuthChanged:()=>()=>{}, getManagedAccountStatus:async()=>({configured:true,authenticated:true})};
-window.showAccess=()=>{const host=document.createElement('div');document.body.append(host);const root=createRoot(host);root.render(<PlusUpgradeModal onClose={()=>root.unmount()}/>)};
+window.glass = {getGitHubAuthStatus:async()=>({state:'signed-in',user:{login:'demo',name:'Demo user'}}), onGitHubAuthChanged:()=>()=>{}, getManagedAccountStatus:async()=>({configured:true,authenticated:true})};
 window.workspace = {
  root: async () => ({path:'/fixture/Rocket',name:'Rocket'}),
  choose: async () => ({path:'/fixture/Rocket',name:'Rocket'}),
@@ -160,14 +158,7 @@ try {
     await page.evaluate(() => window.emitActivity({running:true,message:'Creating rocket scene'}))
     await page.getByRole('button',{name:'Stop',exact:true}).click()
     assert.equal(await page.evaluate(() => window.stopped),true)
-    await page.evaluate(() => window.showAccess())
-    await page.getByRole('dialog').waitFor()
-    await page.getByRole('button',{name:'Subscribe for $1/month',exact:true}).click()
-    await page.getByRole('alert').filter({hasText:'Sandbox checkout unavailable'}).waitFor()
-    assert.equal(await page.getByRole('button',{name:'Subscribe for $1/month',exact:true}).isEnabled(),true)
-    await page.screenshot({path:resolve(tmpdir(),'desktop-access-smoke.png')})
-    await page.keyboard.press('Escape')
-    assert.equal(await page.getByRole('dialog').count(),0)
+    assert.equal(await page.getByRole('button', {name:'Upgrade',exact:true}).count(),0)
     assert.deepEqual(errors,[])
     await page.evaluate(() => {
         const el=document.createElement('div'); el.id='follow-test'; el.style.cssText='position:fixed;left:0;top:0;width:100px;height:100px;overflow:auto';

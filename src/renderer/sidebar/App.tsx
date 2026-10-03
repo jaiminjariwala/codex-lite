@@ -7,8 +7,9 @@ import type { ConfigStatus, GitHubAuthStatus, GlassError, SessionListItem, Sessi
 import type { ConfirmationRequest, LoopStateView, Playbook } from '@op-shared/types'
 import type { SelectedEmail } from '@shared/types'
 import { Settings } from './Settings'
-import { PlusUpgradeModal } from './PlusUpgradeModal'
 import { ChatSidebar } from './ChatSidebar'
+import { FirstRunOnboarding } from './FirstRunOnboarding'
+import { MicrophoneIcon } from './MicrophoneIcon'
 import { VideoRecorder } from './VideoRecorder'
 import { extractVideoFrames, formatMediaDuration } from './video'
 import { ProjectWorkspace } from './ProjectWorkspace'
@@ -98,8 +99,8 @@ export function App(): React.JSX.Element {
     const [draft, setDraft] = useState('')
     const [composerExpanded, setComposerExpanded] = useState(false)
     const [showSettings, setShowSettings] = useState(false)
-    const [accessDialogOpen, setAccessDialogOpen] = useState(false)
-    const checkingAccess = useRef(false)
+    const [accountSetupRequested, setAccountSetupRequested] = useState(false)
+    const [onboardingVisible, setOnboardingVisible] = useState(true)
     // The code artifact shown in the right-hand panel (Claude-style), or null.
     const [codeArtifact, setCodeArtifact] = useState<CodeArtifact | null>(null)
     const [inspectorArtifact, setInspectorArtifact] = useState<InspectorArtifact | null>(null)
@@ -870,20 +871,6 @@ export function App(): React.JSX.Element {
         if (!isSubmittable(draft) && !hasCaptures && !emailStaged) {
             return
         }
-        if (checkingAccess.current) return
-        checkingAccess.current = true
-        try {
-            const access = await window.glass.getManagedAccountStatus()
-            if (!access.authenticated || access.user?.plan !== 'plus' || access.user.subscription_status !== 'active') {
-                setAccessDialogOpen(true)
-                return // Keep the draft and attachments intact for after checkout.
-            }
-        } catch {
-            setAccessDialogOpen(true)
-            return
-        } finally {
-            checkingAccess.current = false
-        }
         // Fold a staged Mail message into the outgoing text so the model gets
         // the exact email (sender/subject/body) alongside the user's ask.
         const text = emailStaged && stagedEmail ? formatEmailContext(stagedEmail, draft) : draft
@@ -1545,7 +1532,7 @@ export function App(): React.JSX.Element {
 
     return (
         <CodePanelContext.Provider value={codePanelApi}>
-            {accessDialogOpen && <PlusUpgradeModal onClose={() => setAccessDialogOpen(false)} />}
+            <FirstRunOnboarding openRequested={accountSetupRequested} onDismiss={() => setAccountSetupRequested(false)} onAuth={setAuthStatus} onVisible={setOnboardingVisible} />
             <div
                 className={`glass-app${navOpen ? '' : ' glass-app--navhidden'}${projectOpen || codeArtifact || inspectorArtifact ? ' glass-app--codeopen' : ''}`}
                 style={{ '--chat-nav-width': `${navWidth}px` } as React.CSSProperties}
@@ -1585,6 +1572,7 @@ export function App(): React.JSX.Element {
                     onChatContextMenu={onChatContextMenu}
                     onToggleSettings={toggleSettings}
                     onAuthStatusChange={setAuthStatus}
+                    onShowAccounts={() => setAccountSetupRequested(true)}
                 />
 
                 {navOpen && <div className="glass-nav__scrim" onClick={() => setNavOpen(false)} />}
@@ -1941,7 +1929,7 @@ export function App(): React.JSX.Element {
                                         className="glass-input"
                                         placeholder={
                                             !signedIn
-                                                ? 'Sign in with GitHub to start chatting…'
+                                                ? 'Sign in to start chatting…'
                                                 : dictation.listening
                                                 ? 'Listening…'
                                                 : 'Message Codex Lite…'
@@ -2100,7 +2088,7 @@ export function App(): React.JSX.Element {
                                                         : 'Dictate: speak instead of typing'
                                             }
                                         >
-                                            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="3" width="6" height="12" rx="3" /><path d="M6 10v2a6 6 0 0 0 12 0v-2M12 18v3M9 21h6" /></svg>
+                                            <MicrophoneIcon />
                                         </button>
                                     )}
                                     {projectRunning && <button type="button" className="glass-send" aria-label="Stop workspace task" title="Stop workspace task (⌘⇧Esc)" onClick={() => void window.workspace.stop()}><StopIcon /></button>}
@@ -2127,7 +2115,7 @@ export function App(): React.JSX.Element {
                 <ProjectWorkspace
                         tabHost={projectTabHost}
                         visible={projectOpen || !!codeArtifact}
-                        browserObscured={showSettings}
+                        browserObscured={showSettings || onboardingVisible}
                         artifact={codeArtifact}
                         onClose={() => { setCodeArtifact(null); setProjectOpen(false) }}
                         width={panelWidth}

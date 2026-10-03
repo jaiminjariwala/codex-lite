@@ -1,0 +1,57 @@
+.onboarding {
+    position: fixed; inset: 0; z-index: 200; overflow: auto;
+    background: white; color: rgb(17,17,18); font-family: Inter, system-ui, sans-serif;
+    display: flex; align-items: center; justify-content: center; padding: 100px 28px 60px;
+    --onboarding-blue: rgb(41,98,205);
+}
+.onboarding--permissions { background: #f3f4f5; }
+.onboarding__titlebar { position: absolute; top: 0; left: 0; right: 0; height: 38px; -webkit-app-region: drag; }
+.onboarding__back { position: absolute; top: 46px; left: 32px; border: 0; background: none; color: rgb(40,40,40); font: 36px/1 system-ui; width: 48px; height: 48px; cursor: pointer; }
+.onboarding__content { width: min(440px, 100%); text-align: center; }
+.onboarding h1 { font-size: 26px; line-height: 1.3; font-weight: 600; margin: 30px 0; letter-spacing: -.5px; color: rgb(17,17,18); }
+.onboarding p { color: rgb(191,208,240); font-size: 15px; line-height: 1.5; margin: 14px 0 24px; }
+.onboarding__ball { width: 76px; height: 76px; object-fit: contain; animation: onboarding-roll 8s linear infinite; }
+@keyframes onboarding-roll { to { transform: rotate(360deg); } }
+.onboarding input { width: 100%; padding: 18px 20px; border: 1px solid transparent; border-radius: 22px; background: rgb(242,242,242); color: rgb(17,17,18); font: inherit; outline: none; }
+.onboarding input:focus { border-color: var(--onboarding-blue); }
+.onboarding input.onboarding__email { font-size: 16px; color: rgb(17,17,18); }
+.onboarding input.onboarding__email:focus { border-color: transparent; outline: none; box-shadow: none; }
+.onboarding p.onboarding__email-description { color: rgb(105,107,110); font-size: 13px; margin: 8px 0 20px; }
+.onboarding button { font-family: inherit; cursor: pointer; }
+.onboarding button:disabled { cursor: default; opacity: .6; }
+.onboarding__primary { width: 100%; border: 0; border-radius: 999px; background: var(--onboarding-blue); color: white; padding: 14px 24px; font-size: 18px; }
+.onboarding__login { width: min(390px, 100%); margin: 0 auto; }
+.onboarding__login h1 { font-size: 24px; }
+.onboarding__primary.onboarding__login-continue { height: 44px; padding: 12px 24px; font-size: 16px; line-height: 20px; font-weight: 500; background: rgb(41,98,205); }
+.onboarding__primary.onboarding__github-button { margin-top: 12px; background: rgb(242,242,242); color: rgb(17,17,18); }
+.onboarding__primary:disabled { background: rgb(191,208,240); opacity: 1; }
+.onboarding__link { display: block; border: 0; background: none; color: var(--onboarding-blue); margin: 22px auto 0; font-size: 16px; padding: 8px; }
+.onboarding__inline-link { padding: 0; font: inherit; color: var(--onboarding-blue); background: none; border: 0; }
+.onboarding__code { display: flex; gap: 6px; margin: 0 0 26px; }
+.onboarding__code input { min-width: 0; width: calc(100% / 6); padding: 0; height: 65px; border-radius: 20px; text-align: center; font-size: 24px; }
+.onboarding__accounts { display: grid; gap: 12px; }
+.onboarding__account { display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 18px; border: 0; border-radius: 24px; background: rgb(236,236,236); color: rgb(17,17,18); text-align: left; gap: 12px; }
+.onboarding__account strong { font-size: 16px; overflow-wrap: anywhere; font-weight: 550; }
+.onboarding__account small { display: block; font-size: 13px; margin-top: 5px; color: rgb(191,208,240); }
+.onboarding__account > span:last-child { font-size: 28px; }
+.onboarding__mic { color: var(--onboarding-blue); display: block; width: 40px; height: 40px; margin: auto; }
+.onboarding__mic svg, .onboarding__permission-row svg { width: 100%; height: 100%; }
+.onboarding__permission-card { border-radius: 26px; background: white; padding: 0 22px; margin: 28px -30px; }
+.onboarding__permission-row { display: flex; align-items: center; gap: 16px; padding: 18px 0; text-align: left; }
+.onboarding__permission-row + .onboarding__permission-row { border-top: 1px solid #eee; }
+.onboarding__permission-row > svg { width: 24px; height: 28px; flex-shrink: 0; color: #777; }
+.onboarding__permission-row > span:not(.onboarding__check):not(.onboarding__access-icon) { flex: 1; }
+.onboarding__permission-row strong { display: block; font-size: 16px; font-weight: 550; }
+.onboarding__permission-row small { display: block; color: rgb(191,208,240); font-size: 13px; line-height: 1.4; margin-top: 4px; }
+.onboarding__access-icon { width: 24px; color: #777; }
+.onboarding__allow { border: 0; border-radius: 999px; background: var(--onboarding-blue); color: white; padding: 8px 14px; font-size: 15px; }
+.onboarding__check { width: 20px; height: 20px; border-radius: 50%; background: green; color: white; text-align: center; font-size: 14px; }
+.onboarding__skip { color: rgb(17,17,18); }
+.onboarding__finish { max-width: 220px; }
+.onboarding__dots { display: flex; justify-content: center; gap: 8px; margin-top: 24px; }
+.onboarding__dots i { width: 7px; height: 7px; border-radius: 50%; background: #ccc; }
+.onboarding__dots i.active { background: #666; }
+.onboarding .onboarding__error { color: #b42318; font-size: 14px; }
+.onboarding__github-code { display: block; font: 22px monospace; margin: 20px; }
+@media (max-width: 600px) { .onboarding__permission-card { margin-left: 0; margin-right: 0; } .onboarding h1 { font-size: 23px; } }
+@media (prefers-reduced-motion: reduce) { .onboarding__ball { animation: none; } }

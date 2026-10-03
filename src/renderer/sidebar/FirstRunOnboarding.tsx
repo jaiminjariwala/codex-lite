@@ -133,15 +133,15 @@ export function FirstRunOnboarding({ openRequested, onDismiss, onAuth, onVisible
                     const status = await action({ action: 'status' }); if (status?.activeId) setStep('accounts')
                 }}>I’ve finished signing in</button>
             </>}
-            {step === 'accounts' && <>
+            {step === 'accounts' && <div className="onboarding__account-chooser">
                 <h1>Choose an account to continue</h1>
                 <p>Use an account you’ve signed into on this Mac, or add another account to Codex Lite.</p>
                 <div className="onboarding__accounts">{snapshot?.accounts.map(account => <button key={account.id} className="onboarding__account" disabled={busy} onClick={() => {
                     if (account.expired) { setStep('login'); setError('Your session expired. Sign in again.') }
                     else void choose(account.id)
-                }}><span><strong>{account.email}</strong><small>{account.provider === 'github' ? 'GitHub account' : account.provider === 'google' ? 'Google account' : 'Previously saved account'}{account.expired ? ' · Sign in again' : ''}</small></span><span aria-hidden="true">›</span></button>)}</div>
+                }}><span><strong>{account.email}</strong><small>{account.provider === 'github' ? 'GitHub account' : account.provider === 'google' ? 'Google account' : 'Previously saved account'}{account.expired ? ' · Sign in again' : ''}</small></span><svg className="onboarding__account-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg></button>)}</div>
                 <button className="onboarding__link" onClick={() => setStep('login')}>Add another account</button>
-            </>}
+            </div>}
             {permission && <>
                 <h1>Enable dictation</h1>
                 <p>Turn your speech into text in Codex Lite.</p>

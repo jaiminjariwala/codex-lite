@@ -10,7 +10,9 @@ interface SavedAccount extends ManagedSession {
     id: string; email: string; name: string; provider: 'email' | 'github' | 'google'
     avatarUrl?: string
 }
-interface Vault { accounts: SavedAccount[]; activeId: string | null; onboardingComplete: boolean }
+type RememberedAccount = Pick<SavedAccount, 'id' | 'email' | 'name' | 'provider' | 'avatarUrl'>
+interface Vault { accounts: SavedAccount[]; rememberedAccounts?: RememberedAccount[]; activeId: string | null; onboardingComplete: boolean }
+const identity = ({ id, email, name, provider, avatarUrl }: RememberedAccount): RememberedAccount => ({ id, email, name, provider, avatarUrl })
 type GitHub = Pick<GitHubAuthService, 'getStatus' | 'startLogin' | 'logout'>
 const expired = (date: string): boolean => !Number.isFinite(Date.parse(date)) || Date.parse(date) <= Date.now()
 /** Tokens stay in the main process and an encrypted, serialized account vault. */
@@ -33,6 +35,8 @@ export class AccountService {
         try {
             const data = JSON.parse(this.codec.decryptString(await fs.readFile(this.path))) as Vault
             if (!Array.isArray(data.accounts) || !data.accounts.every(a => typeof a.id === 'string' && typeof a.token === 'string' && typeof a.expiresAt === 'string' && ['email','github','google'].includes(a.provider))) throw Error('Invalid account storage')
+            if (data.rememberedAccounts !== undefined && (!Array.isArray(data.rememberedAccounts) || !data.rememberedAccounts.every(a => typeof a.id === 'string' && typeof a.email === 'string' && typeof a.name === 'string' && ['email','github','google'].includes(a.provider)))) throw Error('Invalid remembered accounts')
+            data.rememberedAccounts = (data.rememberedAccounts ?? []).map(identity)
             this.vault = data
         } catch (error) {
             if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw Error('Saved accounts could not be read securely. Check macOS Keychain access.')
@@ -48,7 +52,7 @@ export class AccountService {
     }
     private async add(account: SavedAccount): Promise<void> {
         const previous = this.vault!
-        this.vault = { ...previous, accounts: [...previous.accounts.filter(a => a.id !== account.id), account], activeId: account.id }
+        this.vault = { ...previous, accounts: [...previous.accounts.filter(a => a.id !== account.id), account], rememberedAccounts: (previous.rememberedAccounts ?? []).filter(a => a.id !== account.id), activeId: account.id }
         try { await this.save(); await this.backend.adoptSession(account) }
         catch (error) { this.vault = previous; await this.backend.clearSession(); throw error }
     }
@@ -63,8 +67,11 @@ export class AccountService {
     }
     private snapshot(): AccountSnapshot {
         const vault = this.vault!
-        const accounts = vault.accounts.map(({id, email, name, avatarUrl, provider, expiresAt}) => ({ id, email, name, avatarUrl, provider, expired: expired(expiresAt) }))
-        const active = accounts.find(a => a.id === vault.activeId && !a.expired)
+        const accounts = [
+            ...vault.accounts.map(({id, email, name, avatarUrl, provider, expiresAt}) => ({ id, email, name, avatarUrl, provider, expired: expired(expiresAt), signedOut: false })),
+            ...(vault.rememberedAccounts ?? []).filter(a => !vault.accounts.some(saved => saved.id === a.id)).map(a => ({ ...identity(a), expired: true, signedOut: true }))
+        ]
+        const active = accounts.find(a => a.id === vault.activeId && !a.expired && !a.signedOut)
         return { accounts, activeId: active?.id ?? null, onboardingComplete: vault.onboardingComplete, googlePending: !!this.pendingGoogle,
             auth: active ? { state: 'signed-in', user: { login: active.email, name: active.name, avatarUrl: active.avatarUrl } } : { state: 'signed-out' } }
     }
@@ -123,6 +130,8 @@ export class AccountService {
             }
             case 'logout':
                 this.pendingGoogle = null
+                const loggedOut = vault.accounts.find(a => a.id === vault.activeId)
+                if (loggedOut) vault.rememberedAccounts = [...(vault.rememberedAccounts ?? []).filter(a => a.id !== loggedOut.id), identity(loggedOut)]
                 vault.accounts = vault.accounts.filter(a => a.id !== vault.activeId)
                 vault.activeId = null
                 this.pendingGitHub = false

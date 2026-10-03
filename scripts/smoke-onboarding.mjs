@@ -13,6 +13,7 @@ import { FirstRunOnboarding } from '/src/renderer/sidebar/FirstRunOnboarding';
 import '/src/renderer/sidebar/styles.css';
 const state={accounts:[],activeId:null,onboardingComplete:false,auth:{state:'signed-out'},microphone:false,accessibility:false};
 window.calls=[]; let notify=()=>{}; let loginCount=0;
+window.rememberGitHub=()=>{state.accounts.push({id:'gh-saved',email:'github@example.com',name:'Github',provider:'github',expired:true,signedOut:true});notify({...state})};
 window.glass={
  onGitHubAuthChanged:()=>()=>{}, onAccountChanged:cb=>{notify=cb;return()=>{}},
  accountAuth:async request=>{
@@ -23,6 +24,7 @@ window.glass={
   }
   switch(request.action) {
    case 'google': state.googlePending=true;notify({...state});break;
+   case 'github':state.googlePending=false;state.challenge={userCode:'TEST-CODE',verificationUri:'https://github.com/login/device',expiresAt:''};break;
    case 'cancel-login':state.googlePending=false;break;
    case 'google-poll':
     const email=++loginCount===1?'one@example.com':'two@example.com';
@@ -30,6 +32,7 @@ window.glass={
     state.accounts=[...state.accounts.filter(a=>a.id!==id),{id,email,name:email,provider:'google',expired:false}];
     state.activeId=id; state.googlePending=false;state.auth={state:'signed-in',user:{login:email,name:email}}; notify({...state}); break;
    case 'switch': state.activeId=request.id; state.auth={state:'signed-in',user:{login:state.accounts.find(a=>a.id===request.id).email}}; notify({...state});break;
+   case 'logout':state.accounts=state.accounts.map(a=>a.id===state.activeId?{...a,expired:true,signedOut:true}:a);state.activeId=null;state.auth={state:'signed-out'};notify({...state});break;
    case 'microphone': state.microphone=true;break;
    case 'accessibility': state.accessibility=true;break;
    case 'complete':state.onboardingComplete=true;break;
@@ -73,8 +76,10 @@ try {
  assert.equal(await page.locator('.onboarding h1').evaluate(n=>getComputedStyle(n).color),'rgb(17, 17, 18)')
  assert.equal(await page.getByRole('button',{name:'Back',exact:true}).count(),0)
  assert.equal(await page.locator('.onboarding p').first().evaluate(n=>getComputedStyle(n).color),'rgb(105, 107, 110)')
- assert.equal(await page.locator('.onboarding p').first().evaluate(n=>getComputedStyle(n).fontSize),'13px')
- assert.equal(await page.locator('.onboarding p').first().evaluate(n=>getComputedStyle(n).marginTop),'8px')
+ assert.equal(await page.locator('.onboarding p').first().evaluate(n=>getComputedStyle(n).fontSize),'14px')
+ assert.equal(await page.locator('.onboarding p').first().evaluate(n=>getComputedStyle(n).marginTop),'0px')
+ assert.equal(await page.locator('.onboarding__login h1').evaluate(n=>getComputedStyle(n).marginBottom),'12px')
+ assert.equal(await page.locator('.onboarding__login p br').count(),1)
  assert.equal(await google.evaluate(n=>getComputedStyle(n).fontSize),'16px')
  assert.equal(await google.evaluate(n=>n.getBoundingClientRect().height),44)
  assert.equal(await google.evaluate(n=>n.getBoundingClientRect().width),390)
@@ -125,6 +130,22 @@ try {
  await page.getByRole('button',{name:'Open accounts'}).click()
  await page.getByRole('button',{name:'two@example.com',exact:false}).click()
  await page.waitForFunction(()=>!window.onboardingVisible)
+ await page.evaluate(()=>window.glass.accountAuth({action:'logout'}))
+ await page.getByRole('heading',{name:'Choose an account to continue'}).waitFor()
+ assert.match(await page.getByRole('button',{name:'two@example.com',exact:false}).innerText(),/Sign in again/)
+ const switchedBefore=await page.evaluate(()=>window.calls.filter(c=>c==='switch').length)
+ await page.getByRole('button',{name:'two@example.com',exact:false}).click()
+ await page.getByRole('heading',{name:'Continue with Google',exact:true}).waitFor()
+ assert.equal(await page.evaluate(()=>window.calls.filter(c=>c==='switch').length),switchedBefore)
+ await page.getByRole('heading',{name:'Choose an account to continue'}).waitFor()
+ assert.equal(await page.locator('.onboarding__account').count(),2)
+ assert.doesNotMatch(await page.getByRole('button',{name:'two@example.com',exact:false}).innerText(),/Sign in again/)
+ await page.getByRole('button',{name:'two@example.com',exact:false}).click()
+ await page.waitForFunction(()=>!window.onboardingVisible)
+ await page.evaluate(async()=>{await window.glass.accountAuth({action:'logout'});window.rememberGitHub()})
+ await page.getByRole('button',{name:'github@example.com',exact:false}).click()
+ await page.getByRole('heading',{name:'Continue with GitHub',exact:true}).waitFor()
+ assert.equal(await page.evaluate(()=>window.calls.filter(c=>c==='switch').length),switchedBefore+1)
  assert.deepEqual(errors,[])
  // A fresh small window can skip both permission requests.
  const small=await browser.newPage({viewport:{width:700,height:650}})

@@ -38,6 +38,8 @@ Region/window/full-screen shortcuts, screenshot attachments, PDF page rendering,
 
 Google and GitHub browser sign-in, Go app sessions, PostgreSQL account state, and an encrypted multi-account chooser. First-run microphone and optional Accessibility setup. No email codes, SMS, payments, upgrade screens or subscription access gate.
 
+Signing out removes the active account's saved session token, but remembers its email, name, provider and profile image URL in encrypted local storage. The chooser labels it "Sign in again" and opens that provider's browser authentication. Remembered identities cannot switch into a session without signing in. Other accounts with valid saved sessions remain available. Signing in again replaces the remembered entry rather than creating a duplicate.
+
 ## Experimental modules
 
 Operator loops, browser/computer actions, playbooks and container support remain in the source tree. They have separate prerequisites and safety gates and are not advertised as reliable completion of arbitrary tasks.

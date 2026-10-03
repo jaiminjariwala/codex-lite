@@ -260,6 +260,8 @@ export interface DesktopAccount {
     avatarUrl?: string
     provider: 'email' | 'github' | 'google'
     expired: boolean
+    /** Remembered identity only. No saved session exists for this account. */
+    signedOut?: boolean
 }
 export interface AccountSnapshot {
     googlePending?: boolean

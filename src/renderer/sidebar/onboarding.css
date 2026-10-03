@@ -25,7 +25,8 @@
 .onboarding button:disabled { cursor: default; opacity: .6; }
 .onboarding__primary { width: 100%; border: 0; border-radius: 999px; background: var(--onboarding-blue); color: white; padding: 14px 24px; font-size: 18px; }
 .onboarding__login { width: min(390px, 100%); margin: 0 auto; }
-.onboarding__login h1 { font-size: 24px; }
+.onboarding__login h1 { font-size: 24px; margin-bottom: 12px; }
+.onboarding__login p.onboarding__email-description { font-size: 14px; margin-top: 0; }
 .onboarding__primary.onboarding__login-continue { height: 44px; padding: 12px 24px; font-size: 16px; line-height: 20px; font-weight: 500; background: rgb(41,98,205); }
 .onboarding__primary.onboarding__github-button { margin-top: 12px; background: rgb(242,242,242); color: rgb(17,17,18); }
 .onboarding__primary:disabled { background: rgb(191,208,240); opacity: 1; }

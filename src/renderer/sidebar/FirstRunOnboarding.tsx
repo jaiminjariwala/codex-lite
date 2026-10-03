@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import type { AccountAuthRequest, AccountSnapshot, GitHubAuthStatus } from '@shared/types'
+import type { AccountAuthRequest, AccountSnapshot, DesktopAccount, GitHubAuthStatus } from '@shared/types'
 import blueBall from './assets/brand-ball.png'
 import { MicrophoneIcon } from './MicrophoneIcon'
 import './onboarding.css'
@@ -92,6 +92,14 @@ export function FirstRunOnboarding({ openRequested, onDismiss, onAuth, onVisible
         const status = await action({ action: 'switch', id })
         if (status) { if (status.onboardingComplete) close(); else setStep('microphone') }
     }
+    const signInAgain = async (account: DesktopAccount): Promise<void> => {
+        if (account.provider === 'google') {
+            if (await action({ action: 'google' })) setStep('google')
+        } else if (account.provider === 'github') {
+            const status = await action({ action: 'github' })
+            if (status) { setGitHubCode(status.challenge?.userCode || ''); setStep('github') }
+        } else setStep('login')
+    }
     if (!visible) return null
     const permission = step === 'microphone' || step === 'accessibility'
     return <section className={`onboarding${permission ? ' onboarding--permissions' : ''}`} aria-label="Codex Lite setup">
@@ -109,7 +117,7 @@ export function FirstRunOnboarding({ openRequested, onDismiss, onAuth, onVisible
             {step === 'loading' && <h1>Welcome to Codex Lite</h1>}
             {step === 'login' && <div className="onboarding__login">
                 <h1>Log in or create an account</h1>
-                <p className="onboarding__email-description">Sign in securely in your browser. No password or email code needed.</p>
+                <p className="onboarding__email-description">Sign in securely in your browser.<br />No password or email code needed.</p>
                 <button className="onboarding__primary onboarding__login-continue" disabled={busy} onClick={async () => {
                     if (await action({ action: 'google' })) setStep('google')
                 }}>Continue with Google</button>
@@ -135,11 +143,11 @@ export function FirstRunOnboarding({ openRequested, onDismiss, onAuth, onVisible
             </>}
             {step === 'accounts' && <div className="onboarding__account-chooser">
                 <h1>Choose an account to continue</h1>
-                <p>Use an account you’ve signed into on this Mac, or add another account to Codex Lite.</p>
+                <p>Choose an account on this Mac. Signed-out accounts will ask you to sign in again in your browser.</p>
                 <div className="onboarding__accounts">{snapshot?.accounts.map(account => <button key={account.id} className="onboarding__account" disabled={busy} onClick={() => {
-                    if (account.expired) { setStep('login'); setError('Your session expired. Sign in again.') }
+                    if (account.signedOut || account.expired) void signInAgain(account)
                     else void choose(account.id)
-                }}><span><strong>{account.email}</strong><small>{account.provider === 'github' ? 'GitHub account' : account.provider === 'google' ? 'Google account' : 'Previously saved account'}{account.expired ? ' · Sign in again' : ''}</small></span><svg className="onboarding__account-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg></button>)}</div>
+                }}><span><strong>{account.email}</strong><small>{account.provider === 'github' ? 'GitHub account' : account.provider === 'google' ? 'Google account' : 'Previously saved account'}{account.signedOut || account.expired ? ' · Sign in again' : ''}</small></span><svg className="onboarding__account-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg></button>)}</div>
                 <button className="onboarding__link" onClick={() => setStep('login')}>Add another account</button>
             </div>}
             {permission && <>

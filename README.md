@@ -6,9 +6,35 @@ I built a macOS app that puts AI chat, your code, and a browser next to each oth
 
 This is my independent portfolio project, not an OpenAI product. It does not include a Codex or ChatGPT subscription.
 
-![Codex Lite chat and code workspace](docs/media/code-workspace.png)
-
 ## Take a look
+
+### First-run screens
+
+The current onboarding UI.
+
+#### 1. Welcome
+
+![Welcome to Codex Lite](docs/media/01-welcome.png)
+
+#### 2. Sign in with Google or GitHub
+
+![Google and GitHub sign-in options](docs/media/02-sign-in.png)
+
+#### 3. Continue in your browser
+
+![Waiting for Google sign-in in the browser](docs/media/03-browser-sign-in.png)
+
+#### 4. Choose an account
+
+![Choose an account to continue](docs/media/04-account-chooser.png)
+
+#### 5. Enable dictation
+
+![Allow microphone access or skip dictation setup](docs/media/05-microphone-permission.png)
+
+### Chat and code workspace
+
+![Codex Lite chat and code workspace](docs/media/code-workspace.png)
 
 ### Watch it in action
 
@@ -28,7 +54,7 @@ Choose a Classic or Coastal ball, optionally rotate the Dock icon, manage local 
 
 ![Dark mode settings](docs/media/settings-dark.png)
 
-These are development screenshots recorded on September 13, 2026. They show the interface, not a benchmark of answer or code correctness.
+The workspace and settings screenshots above show the interface, not a benchmark of answer or code correctness.
 
 ## What I built
 

@@ -83,6 +83,8 @@ const bridge: GlassBridge = {
     getConfigStatus: (): Promise<ConfigStatus> => ipcRenderer.invoke('config:get-status'),
     saveConfig: (cfg: GatewayConfigInput): Promise<void> => ipcRenderer.invoke('config:save', cfg),
 
+    onAccountChanged: (cb) => subscribe<[import('@shared/types').AccountSnapshot]>('account:changed', cb),
+    accountAuth: (request) => ipcRenderer.invoke('account:auth', request),
     getGitHubAuthStatus: (): Promise<GitHubAuthStatus> =>
         ipcRenderer.invoke('github-auth:status'),
     startGitHubLogin: (): Promise<GitHubDeviceChallenge> =>
@@ -92,8 +94,6 @@ const bridge: GlassBridge = {
     dockPreferences: (input) => ipcRenderer.invoke('dock:preferences', input),
     getManagedAccountStatus: (): Promise<ManagedAccountStatus> =>
         ipcRenderer.invoke('managed:status'),
-    startPlusCheckout: (): Promise<void> => ipcRenderer.invoke('managed:checkout'),
-    openBillingPortal: (): Promise<void> => ipcRenderer.invoke('managed:portal'),
     openGitHubVerification: (): Promise<void> =>
         ipcRenderer.invoke('github-auth:open-verification'),
     getWorkspaceContext: (): Promise<WorkspaceContext> => ipcRenderer.invoke('workspace:context'),

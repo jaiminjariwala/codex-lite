@@ -253,6 +253,28 @@ export interface GitHubAuthStatus {
 }
 
 /** Short-lived Device Flow details that are safe to show in the renderer. */
+export interface DesktopAccount {
+    id: string
+    email: string
+    name: string
+    avatarUrl?: string
+    provider: 'email' | 'github' | 'google'
+    expired: boolean
+}
+export interface AccountSnapshot {
+    googlePending?: boolean
+    accounts: DesktopAccount[]
+    activeId: string | null
+    onboardingComplete: boolean
+    auth: GitHubAuthStatus
+    microphone?: boolean
+    accessibility?: boolean
+    challenge?: GitHubDeviceChallenge
+}
+export type AccountAuthRequest =
+    | { action: 'status' | 'github' | 'google' | 'google-poll' | 'google-reopen' | 'cancel-login' | 'logout' | 'permissions' | 'microphone' | 'accessibility' | 'complete' }
+    | { action: 'switch'; id: string }
+
 export interface GitHubDeviceChallenge {
     userCode: string
     verificationUri: string
@@ -278,7 +300,6 @@ export interface ManagedAccountStatus {
         email?: string
         avatar_url?: string
         plan: 'free' | 'plus'
-        subscription_status: string
     }
     usage?: ManagedUsage
     message?: string
@@ -372,6 +393,8 @@ export interface GlassBridge {
     /** Persist gateway settings; the API key is stored encrypted (Req 7.2). */
     saveConfig(cfg: GatewayConfigInput): Promise<void>
     /** Read the non-secret GitHub authentication state. */
+    accountAuth(request: AccountAuthRequest): Promise<AccountSnapshot>
+    onAccountChanged(cb: (status: AccountSnapshot) => void): () => void
     getGitHubAuthStatus(): Promise<GitHubAuthStatus>
     /** Begin GitHub Device Flow and open its verification page in the browser. */
     startGitHubLogin(): Promise<GitHubDeviceChallenge>
@@ -383,10 +406,6 @@ export interface GlassBridge {
     getManagedAccountStatus(): Promise<ManagedAccountStatus>
     localAI(action: 'status' | 'prepare' | 'start' | 'pause'): Promise<import('./local-ai').LocalAIStatus>
     dockPreferences(input?: import('./dock-icon').DockPreferences): Promise<import('./dock-icon').DockPreferences & { previews: Record<import('./dock-icon').DockIcon, string> }>
-    /** Open Stripe-hosted Plus Checkout in the default browser. */
-    startPlusCheckout(): Promise<void>
-    /** Open Stripe's customer portal for an existing subscriber. */
-    openBillingPortal(): Promise<void>
     /** Read current local Git/environment metadata; performs no mutation. */
     getWorkspaceContext(): Promise<WorkspaceContext>
     /** Run one explicit command entered by the user in the bottom terminal. */

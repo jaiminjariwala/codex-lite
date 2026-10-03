@@ -54,48 +54,43 @@ describe('ManagedBackendClient', () => {
         expect(calls).toEqual(['https://api.example.test/v1/auth/github'])
     })
 
-    it('opens only the Stripe-hosted Checkout URL returned by the backend', async () => {
-        const opened: string[] = []
+    it('starts and polls Google through the backend without trusting renderer identity claims', async () => {
+        const bodies: unknown[] = []
         const client = new ManagedBackendClient({
-            baseURL: 'https://api.example.test',
-            userDataDir: await tempDirectory(),
-            getGitHubToken: async () => 'github-secret',
-            openExternal: async (url) => { opened.push(url) },
-            fetchImpl: vi.fn(async (input) => {
-                if (String(input).endsWith('/v1/auth/github')) {
-                    return Response.json({
-                        session_token: 'app-session',
-                        expires_at: new Date(Date.now() + 86_400_000).toISOString(),
-                        user: {},
-                        usage: {}
-                    })
-                }
-                return Response.json({ id: 'cs_test', url: 'https://checkout.stripe.com/c/pay/cs_test' })
+            baseURL: 'https://api.example.test', userDataDir: await tempDirectory(), getGitHubToken: async () => null,
+            fetchImpl: vi.fn(async (input, options) => {
+                bodies.push(JSON.parse(String(options?.body)))
+                if (String(input).endsWith('/start')) return Response.json({authorization_url:'https://accounts.google.com/o/oauth2/v2/auth',state:'state',poll_token:'poll'})
+                return Response.json({ session_token: 'google-session', expires_at: new Date(Date.now() + 86_400_000).toISOString(), user: {id:'google_42',email:'demo@example.com'} })
             }) as typeof fetch
         })
-
-        await client.createCheckout()
-        expect(opened).toEqual(['https://checkout.stripe.com/c/pay/cs_test'])
+        await client.startGoogleLogin()
+        const result = await client.pollGoogleLogin('state','poll')
+        expect(result!.session_token).toBe('google-session')
+        expect(bodies).toEqual([{},{state:'state',poll_token:'poll'}])
     })
 
-    it('rejects a non-Stripe redirect from the billing response', async () => {
+    it('rejects an external Google authorization URL supplied by the backend', async () => {
         const client = new ManagedBackendClient({
-            baseURL: 'https://api.example.test',
-            userDataDir: await tempDirectory(),
-            getGitHubToken: async () => 'github-secret',
-            fetchImpl: vi.fn(async (input) => {
-                if (String(input).endsWith('/v1/auth/github')) {
-                    return Response.json({
-                        session_token: 'app-session',
-                        expires_at: new Date(Date.now() + 86_400_000).toISOString(),
-                        user: {},
-                        usage: {}
-                    })
-                }
-                return Response.json({ url: 'https://evil.example/steal' })
-            }) as typeof fetch
+            baseURL:'https://api.example.test',userDataDir:await tempDirectory(),getGitHubToken:async()=>null,
+            fetchImpl:vi.fn(async()=>Response.json({authorization_url:'https://attacker.example/o/oauth2/v2/auth',state:'state',poll_token:'poll'})) as typeof fetch
         })
-
-        await expect(client.createCheckout()).rejects.toThrow('unsafe URL')
+        await expect(client.startGoogleLogin()).rejects.toThrow('Invalid Google authorization URL')
     })
+    it('handles pending Google sign-in and rejects invalid app sessions', async () => {
+        const fetchImpl = vi.fn()
+            .mockResolvedValueOnce(Response.json({status:'pending'},{status:202}))
+            .mockResolvedValueOnce(Response.json({session_token:'bad',expires_at:'2000-01-01',user:{id:'google_42',email:'demo@example.com'}}))
+        const client = new ManagedBackendClient({baseURL:'https://api.example.test',userDataDir:await tempDirectory(),getGitHubToken:async()=>null,fetchImpl:fetchImpl as typeof fetch})
+        await expect(client.pollGoogleLogin('state','poll')).resolves.toBeNull()
+        await expect(client.pollGoogleLogin('state','poll')).rejects.toThrow('invalid session')
+    })
+    it('does not use a cached GitHub identity after another provider session expires', async () => {
+        const getGitHubToken = vi.fn(async () => 'other-github-user')
+        const client = new ManagedBackendClient({ baseURL:'https://api.example.test', userDataDir:await tempDirectory(), getGitHubToken })
+        await client.adoptSession({token:'expired-email',expiresAt:'2000-01-01T00:00:00Z'})
+        await expect(client.provider()).resolves.toBeNull()
+        expect(getGitHubToken).not.toHaveBeenCalled()
+    })
+
 })

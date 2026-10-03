@@ -1,4 +1,4 @@
-import { app, shell } from 'electron'
+import { app } from 'electron'
 import { promises as fs } from 'node:fs'
 import { dirname, join } from 'node:path'
 import type { ManagedAccountStatus, ManagedUsage } from '@shared/types'
@@ -9,12 +9,12 @@ declare const __MANAGED_BACKEND_URL__: string
 const SESSION_FILE = 'managed-backend-session.enc'
 const REQUEST_TIMEOUT_MS = 45_000
 
-interface ManagedSession {
+export interface ManagedSession {
     token: string
     expiresAt: string
 }
 
-interface ManagedAuthResponse {
+export interface ManagedAuthResponse {
     session_token: string
     expires_at: string
     user: ManagedAccountStatus['user']
@@ -27,7 +27,6 @@ interface ManagedBackendOptions {
     codec?: SecretCodec
     fetchImpl?: typeof fetch
     getGitHubToken: () => Promise<string | null>
-    openExternal?: (url: string) => Promise<void>
 }
 
 export function configuredManagedBackendURL(): string {
@@ -42,7 +41,6 @@ export class ManagedBackendClient {
     private readonly codec: SecretCodec
     private readonly fetchImpl: typeof fetch
     private readonly getGitHubToken: () => Promise<string | null>
-    private readonly openExternal: (url: string) => Promise<void>
 
     constructor(options: ManagedBackendOptions) {
         this.baseURL = (options.baseURL ?? configuredManagedBackendURL()).replace(/\/+$/, '')
@@ -50,20 +48,9 @@ export class ManagedBackendClient {
         this.codec = options.codec ?? safeStorageCodec
         this.fetchImpl = options.fetchImpl ?? fetch
         this.getGitHubToken = options.getGitHubToken
-        this.openExternal = options.openExternal ?? ((url) => shell.openExternal(url))
     }
 
     configured(): boolean { return this.baseURL.length > 0 }
-
-    async requireAccess(): Promise<void> {
-        const status = await this.status()
-        if (!status.configured || !status.authenticated) {
-            throw new Error(status.message || 'Connect the app backend and sign in to check desktop access.')
-        }
-        if (status.user?.plan !== 'plus' || status.user.subscription_status !== 'active') {
-            throw new Error('Desktop access requires the $1/month subscription. Open the access dialog to subscribe.')
-        }
-    }
 
     async provider(): Promise<{ baseURL: string; model: string; apiKey: string } | null> {
         if (!this.configured()) return null
@@ -89,34 +76,31 @@ export class ManagedBackendClient {
         }
     }
 
-    async createCheckout(): Promise<void> {
-        const body = await this.postForURL('/v1/billing/checkout')
-        await this.openStripeURL(body.url)
+    async startGoogleLogin(): Promise<{ authorization_url: string; state: string; poll_token: string }> {
+        const response = await this.request('/v1/auth/google/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+        const result = await this.readJSON<{ authorization_url: string; state: string; poll_token: string }>(response)
+        const url = new URL(result.authorization_url)
+        if (url.origin !== 'https://accounts.google.com' || url.pathname !== '/o/oauth2/v2/auth' || url.username || url.password || !result.state || !result.poll_token) throw new Error('Invalid Google authorization URL.')
+        return result
     }
-
-    async openBillingPortal(): Promise<void> {
-        const body = await this.postForURL('/v1/billing/portal')
-        await this.openStripeURL(body.url)
+    async pollGoogleLogin(state: string, poll_token: string): Promise<ManagedAuthResponse | null> {
+        const response = await this.request('/v1/auth/google/poll', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ state, poll_token }) })
+        if (response.status === 202) return null
+        const result = await this.readJSON<ManagedAuthResponse>(response)
+        if (!result.session_token || !Number.isFinite(Date.parse(result.expires_at)) || Date.parse(result.expires_at) <= Date.now() || !result.user?.id?.startsWith('google_') || !result.user.email) throw new Error('Google sign-in returned an invalid session.')
+        return result
     }
+    async savedSession(): Promise<ManagedSession | null> { return this.readSession() }
+    async adoptSession(session: ManagedSession): Promise<void> { await this.writeSession(session) }
 
     async clearSession(): Promise<void> {
         await fs.rm(this.sessionPath, { force: true }).catch(() => undefined)
     }
 
-    private async postForURL(path: string): Promise<{ url: string }> {
-        const token = await this.ensureSession()
-        if (!token) throw new Error('Sign in with GitHub first.')
-        const response = await this.authorizedRequest(path, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: '{}'
-        }, token)
-        return this.readJSON<{ url: string }>(response)
-    }
-
     private async ensureSession(): Promise<string | null> {
         const saved = await this.readSession()
         if (saved && new Date(saved.expiresAt).getTime() > Date.now() + 60_000) return saved.token
+        if (saved) return null // Expired sessions require sign-in, never another cached identity.
         const githubToken = await this.getGitHubToken()
         if (!githubToken) return null
         const response = await this.request('/v1/auth/github', {
@@ -188,14 +172,4 @@ export class ManagedBackendClient {
         await fs.writeFile(this.sessionPath, this.codec.encryptString(JSON.stringify(session)))
     }
 
-    private async openStripeURL(value: string): Promise<void> {
-        const url = new URL(value)
-        const trusted = url.protocol === 'https:' &&
-            (url.hostname === 'checkout.stripe.com' || url.hostname === 'billing.stripe.com')
-        const base = new URL(this.baseURL)
-        const custom = url.origin === base.origin && url.pathname === '/checkout' &&
-            (url.protocol === 'https:' || (url.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(url.hostname)))
-        if (!trusted && !custom) throw new Error('The billing service returned an unsafe URL.')
-        await this.openExternal(url.href)
-    }
 }

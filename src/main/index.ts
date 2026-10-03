@@ -14,6 +14,7 @@ import {
 } from './config'
 import { registerGitHubAuthIpc } from './github-auth'
 import { ManagedBackendClient } from './managed-backend'
+import { AccountService } from './accounts'
 import { LocalAI } from './local-ai'
 import { LOCAL_MODEL } from '../shared/local-ai'
 import { WorkspaceService } from './workspace'
@@ -339,6 +340,14 @@ app.whenReady().then(async () => {
     managedBackend = new ManagedBackendClient({
         getGitHubToken: () => githubAuth.service.getAccessToken()
     })
+    const accounts = new AccountService(managedBackend, githubAuth.service)
+    ipcMain.handle('account:auth', async (event, request: import('@shared/types').AccountAuthRequest) => {
+        if (!mainWindow || event.sender !== mainWindow.webContents || event.senderFrame !== mainWindow.webContents.mainFrame) throw new Error('Untrusted account request.')
+        if (!request || typeof request.action !== 'string') throw new Error('Invalid account request.')
+        const status = await accounts.run(request)
+        if (!['status', 'permissions', 'microphone', 'accessibility'].includes(request.action)) mainWindow?.webContents.send('account:changed', status)
+        return status
+    })
 
     // Persistent session store: writes the active session to
     // `userData/sessions/current.json` after each change and loads it on launch
@@ -627,11 +636,10 @@ app.whenReady().then(async () => {
     // overlay closes on a completed selection or cancel (Req 4.3, 4.4); the
     // crop + Flow B wiring lands in tasks 8.2 / 8.3.
     const requireSignedIn = async (): Promise<void> => {
-        const status = await githubAuth.service.getStatus()
+        const { auth: status } = await accounts.run({ action: 'status' })
         if (status.state !== 'signed-in') {
-            throw new Error('Sign in with GitHub before starting a chat.')
+            throw new Error('Sign in before starting a chat.')
         }
-        await managedBackend!.requireAccess()
     }
     const projectFiles = new WorkspaceService(app.getPath('userData'))
     await projectFiles.init()
@@ -735,8 +743,6 @@ app.whenReady().then(async () => {
         getWorkspaceContext: () => readWorkspaceContext(),
         onRunTerminalCommand: command => projectFiles.run(command),
         getManagedAccountStatus: () => managedBackend!.status(),
-        onStartPlusCheckout: () => managedBackend!.createCheckout(),
-        onOpenBillingPortal: () => managedBackend!.openBillingPortal(),
         onOpenSession: async (id) => {
             const current = sessionManager.getSession()
             // The renderer synthesizes the current in-memory session alongside

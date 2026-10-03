@@ -28,7 +28,7 @@ export default defineConfig(({ mode }) => {
                 process.env.GITHUB_OAUTH_CLIENT_ID ?? env.GITHUB_OAUTH_CLIENT_ID ?? 'Ov23lifIQM3WCHRFLS04'
             ),
             // Public URL of the publisher-operated Go service. Provider and
-            // Stripe secrets remain on that service; only this URL is shipped.
+            // Auth secrets remain on that service; only this URL is shipped.
             __MANAGED_BACKEND_URL__: JSON.stringify(
                 process.env.MANAGED_BACKEND_URL ?? env.MANAGED_BACKEND_URL ?? ''
             )

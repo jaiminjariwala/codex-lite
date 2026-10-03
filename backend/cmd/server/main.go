@@ -12,7 +12,6 @@ import (
 
 	"github.com/jaiminjariwala5/computer-browser-use/backend/internal/ai"
 	"github.com/jaiminjariwala5/computer-browser-use/backend/internal/auth"
-	"github.com/jaiminjariwala5/computer-browser-use/backend/internal/billing"
 	"github.com/jaiminjariwala5/computer-browser-use/backend/internal/config"
 	"github.com/jaiminjariwala5/computer-browser-use/backend/internal/httpapi"
 	"github.com/jaiminjariwala5/computer-browser-use/backend/internal/store"
@@ -31,12 +30,6 @@ func main() {
 		ai.NewCompatibleProvider("gemini", "https://generativelanguage.googleapis.com/v1beta/openai", cfg.GeminiModel, cfg.GeminiAPIKey, client),
 		ai.NewCompatibleProvider("openrouter", "https://openrouter.ai/api/v1", cfg.OpenRouterModel, cfg.OpenRouterAPIKey, client),
 	)
-	stripe := billing.NewStripe(billing.Config{
-		SecretKey: cfg.StripeSecretKey, WebhookSecret: cfg.StripeWebhookSecret,
-		CheckoutURL: cfg.CheckoutURL,
-		PlusPriceID: cfg.StripePlusPriceID, SuccessURL: cfg.StripeSuccessURL,
-		CancelURL: cfg.StripeCancelURL, PortalReturnURL: cfg.StripePortalReturnURL,
-	}, client)
 	var data store.Store = store.NewMemory()
 	var closeStore func()
 	if cfg.DatabaseURL != "" {
@@ -56,10 +49,10 @@ func main() {
 	}
 
 	api := httpapi.New(httpapi.Config{
-		StripePublishableKey: cfg.StripePublishableKey,
-		GitHubClientID:       cfg.GitHubClientID, GitHubClientSecret: cfg.GitHubClientSecret, GitHubRedirectURL: cfg.GitHubRedirectURL,
-		PublicAppURL: cfg.PublicAppURL, FreeMonthlyUnits: cfg.FreeMonthlyUnits, PlusMonthlyUnits: cfg.PlusMonthlyUnits,
-	}, auth.NewGitHub(client), auth.NewSessions(cfg.SessionSecret), data, router, stripe, logger)
+		GoogleClientID: cfg.GoogleClientID, GoogleClientSecret: cfg.GoogleClientSecret, GoogleRedirectURL: cfg.GoogleRedirectURL, AuthHTTPClient: client,
+		GitHubClientID: cfg.GitHubClientID, GitHubClientSecret: cfg.GitHubClientSecret, GitHubRedirectURL: cfg.GitHubRedirectURL,
+		PublicAppURL: cfg.PublicAppURL, FreeMonthlyUnits: cfg.FreeMonthlyUnits,
+	}, auth.NewGitHub(client), auth.NewSessions(cfg.SessionSecret), data, router, logger)
 
 	server := &http.Server{
 		Addr:              ":" + cfg.Port,

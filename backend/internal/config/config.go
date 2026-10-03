@@ -9,76 +9,64 @@ import (
 )
 
 type Config struct {
-	StripePublishableKey  string
-	CheckoutURL           string
-	GitHubClientID        string
-	GitHubClientSecret    string
-	GitHubRedirectURL     string
-	Port                  string
-	DatabaseURL           string
-	PublicAppURL          string
-	SessionSecret         string
-	GeminiAPIKey          string
-	GeminiModel           string
-	OpenRouterAPIKey      string
-	OpenRouterModel       string
-	OpenAIAPIKey          string
-	OpenAICodexModel      string
-	FreeMonthlyUnits      int64
-	PlusMonthlyUnits      int64
-	StripeSecretKey       string
-	StripeWebhookSecret   string
-	StripePlusPriceID     string
-	StripeSuccessURL      string
-	StripeCancelURL       string
-	StripePortalReturnURL string
+	GoogleClientID     string
+	GoogleClientSecret string
+	GoogleRedirectURL  string
+	GitHubClientID     string
+	GitHubClientSecret string
+	GitHubRedirectURL  string
+	Port               string
+	DatabaseURL        string
+	PublicAppURL       string
+	SessionSecret      string
+	GeminiAPIKey       string
+	GeminiModel        string
+	OpenRouterAPIKey   string
+	OpenRouterModel    string
+	OpenAIAPIKey       string
+	OpenAICodexModel   string
+	FreeMonthlyUnits   int64
 }
 
 func Load() (Config, error) {
 	cfg := Config{
-		StripePublishableKey:  strings.TrimSpace(os.Getenv("STRIPE_PUBLISHABLE_KEY")),
-		CheckoutURL:           strings.TrimSpace(os.Getenv("CHECKOUT_URL")),
-		GitHubClientID:        strings.TrimSpace(os.Getenv("GITHUB_OAUTH_CLIENT_ID")),
-		GitHubClientSecret:    strings.TrimSpace(os.Getenv("GITHUB_OAUTH_CLIENT_SECRET")),
-		GitHubRedirectURL:     env("GITHUB_OAUTH_REDIRECT_URL", "http://127.0.0.1:8787/v1/auth/github/callback"),
-		Port:                  env("PORT", "8787"),
-		DatabaseURL:           strings.TrimSpace(os.Getenv("DATABASE_URL")),
-		PublicAppURL:          env("PUBLIC_APP_URL", "http://localhost:5173"),
-		SessionSecret:         strings.TrimSpace(os.Getenv("SESSION_SECRET")),
-		GeminiAPIKey:          strings.TrimSpace(os.Getenv("GEMINI_API_KEY")),
-		GeminiModel:           env("GEMINI_MODEL", "gemini-2.5-flash"),
-		OpenRouterAPIKey:      strings.TrimSpace(os.Getenv("OPENROUTER_API_KEY")),
-		OpenRouterModel:       env("OPENROUTER_MODEL", "openrouter/free"),
-		OpenAIAPIKey:          strings.TrimSpace(os.Getenv("OPENAI_API_KEY")),
-		OpenAICodexModel:      env("OPENAI_CODEX_MODEL", "gpt-5-codex"),
-		FreeMonthlyUnits:      envInt64("FREE_MONTHLY_UNITS", 50_000),
-		PlusMonthlyUnits:      envInt64("PLUS_MONTHLY_UNITS", 2_000_000),
-		StripeSecretKey:       strings.TrimSpace(os.Getenv("STRIPE_SECRET_KEY")),
-		StripeWebhookSecret:   strings.TrimSpace(os.Getenv("STRIPE_WEBHOOK_SECRET")),
-		StripePlusPriceID:     strings.TrimSpace(os.Getenv("STRIPE_PLUS_PRICE_ID")),
-		StripeSuccessURL:      env("STRIPE_SUCCESS_URL", "http://localhost:5173/billing/success"),
-		StripeCancelURL:       env("STRIPE_CANCEL_URL", "http://localhost:5173/billing/cancel"),
-		StripePortalReturnURL: env("STRIPE_PORTAL_RETURN_URL", "http://localhost:5173"),
+		GoogleClientID:     strings.TrimSpace(os.Getenv("GOOGLE_OAUTH_CLIENT_ID")),
+		GoogleClientSecret: strings.TrimSpace(os.Getenv("GOOGLE_OAUTH_CLIENT_SECRET")),
+		GoogleRedirectURL:  env("GOOGLE_OAUTH_REDIRECT_URL", "http://127.0.0.1:8787/v1/auth/google/callback"),
+		GitHubClientID:     strings.TrimSpace(os.Getenv("GITHUB_OAUTH_CLIENT_ID")),
+		GitHubClientSecret: strings.TrimSpace(os.Getenv("GITHUB_OAUTH_CLIENT_SECRET")),
+		GitHubRedirectURL:  env("GITHUB_OAUTH_REDIRECT_URL", "http://127.0.0.1:8787/v1/auth/github/callback"),
+		Port:               env("PORT", "8787"),
+		DatabaseURL:        strings.TrimSpace(os.Getenv("DATABASE_URL")),
+		PublicAppURL:       env("PUBLIC_APP_URL", "http://localhost:5173"),
+		SessionSecret:      strings.TrimSpace(os.Getenv("SESSION_SECRET")),
+		GeminiAPIKey:       strings.TrimSpace(os.Getenv("GEMINI_API_KEY")),
+		GeminiModel:        env("GEMINI_MODEL", "gemini-2.5-flash"),
+		OpenRouterAPIKey:   strings.TrimSpace(os.Getenv("OPENROUTER_API_KEY")),
+		OpenRouterModel:    env("OPENROUTER_MODEL", "openrouter/free"),
+		OpenAIAPIKey:       strings.TrimSpace(os.Getenv("OPENAI_API_KEY")),
+		OpenAICodexModel:   env("OPENAI_CODEX_MODEL", "gpt-5-codex"),
+		FreeMonthlyUnits:   envInt64("FREE_MONTHLY_UNITS", 50_000),
+	}
+	if (cfg.GoogleClientID == "") != (cfg.GoogleClientSecret == "") {
+		return Config{}, errors.New("GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET must be set together")
 	}
 	if len(cfg.SessionSecret) < 32 {
 		return Config{}, errors.New("SESSION_SECRET must contain at least 32 characters")
 	}
-	for _, address := range []string{cfg.GitHubRedirectURL, cfg.CheckoutURL} {
+	for _, address := range []string{cfg.GitHubRedirectURL, cfg.GoogleRedirectURL} {
 		if address == "" {
 			continue
 		}
 		parsed, err := url.Parse(address)
-		if err != nil || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" || (parsed.Scheme != "https" && !(parsed.Scheme == "http" && (parsed.Hostname() == "127.0.0.1" || parsed.Hostname() == "localhost"))) {
-			return Config{}, errors.New("OAuth and checkout URLs require HTTPS, except localhost development")
+		if err != nil || parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" || (parsed.Scheme != "https" && !(parsed.Scheme == "http" && (parsed.Hostname() == "127.0.0.1" || parsed.Hostname() == "localhost"))) {
+			return Config{}, errors.New("OAuth URLs require HTTPS, except localhost development")
 		}
-	}
-	if cfg.CheckoutURL != "" && cfg.StripePublishableKey == "" {
-		return Config{}, errors.New("CHECKOUT_URL requires STRIPE_PUBLISHABLE_KEY")
 	}
 	if cfg.OpenRouterModel != "openrouter/free" && !strings.HasSuffix(cfg.OpenRouterModel, ":free") {
 		return Config{}, errors.New("OPENROUTER_MODEL must be openrouter/free or a :free model; paid fallback is disabled")
 	}
-	if cfg.FreeMonthlyUnits <= 0 || cfg.PlusMonthlyUnits <= 0 {
+	if cfg.FreeMonthlyUnits <= 0 {
 		return Config{}, errors.New("monthly usage limits must be positive")
 	}
 	return cfg, nil

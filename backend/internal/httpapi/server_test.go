@@ -12,7 +12,6 @@ import (
 
 	"github.com/jaiminjariwala5/computer-browser-use/backend/internal/ai"
 	"github.com/jaiminjariwala5/computer-browser-use/backend/internal/auth"
-	"github.com/jaiminjariwala5/computer-browser-use/backend/internal/billing"
 	"github.com/jaiminjariwala5/computer-browser-use/backend/internal/domain"
 	"github.com/jaiminjariwala5/computer-browser-use/backend/internal/store"
 )
@@ -35,43 +34,26 @@ func (aiStub) Complete(context.Context, ai.Request) (ai.Result, error) {
 	}, nil
 }
 
-type stripeStub struct {
-	event billing.Event
-}
-
-func (stripeStub) Ready() bool { return true }
-func (stripeStub) CreateCheckout(context.Context, string, string) (billing.Checkout, error) {
-	return billing.Checkout{ID: "cs_test", URL: "https://checkout.stripe.test/session"}, nil
-}
-func (stripeStub) CreatePortal(context.Context, string) (billing.Checkout, error) {
-	return billing.Checkout{ID: "bps_test", URL: "https://billing.stripe.test/session"}, nil
-}
-func (s stripeStub) VerifyEvent([]byte, string) (billing.Event, error) { return s.event, nil }
-
-func TestDesktopAccessRequired(t *testing.T) {
-	data := store.NewMemory()
-	server := newTestServer(data, stripeStub{})
+func TestNoPaymentRequired(t *testing.T) {
+	server := newTestServer(store.NewMemory())
 	token := authenticate(t, server)
 	for _, endpoint := range []string{"/v1/chat", "/v1/chat/completions"} {
-		response := request(t, server, http.MethodPost, endpoint, token, `{"messages":[{"role":"user","content":"Give me Python code"}]}`)
-		if response.Code != http.StatusPaymentRequired {
+		response := request(t, server, http.MethodPost, endpoint, token, `{"messages":[{"role":"user","content":"Hello"}]}`)
+		if response.Code != http.StatusOK {
 			t.Fatalf("%s: %d %s", endpoint, response.Code, response.Body.String())
 		}
 	}
-	checkout := request(t, server, http.MethodPost, "/v1/billing/checkout", token, `{}`)
-	if checkout.Code != http.StatusOK {
-		t.Fatalf("checkout: %d", checkout.Code)
-	}
-	_ = data.SetStripeSubscription("gh_42", "cus_42", "sub_42", "canceled", domain.PlanPlus)
-	response := request(t, server, http.MethodPost, "/v1/chat", token, `{"messages":[{"role":"user","content":"Hello"}]}`)
-	if response.Code != http.StatusPaymentRequired {
-		t.Fatalf("canceled subscription: %d", response.Code)
+	for _, endpoint := range []string{"/checkout", "/checkout/return", "/v1/billing/checkout", "/v1/billing/portal", "/v1/webhooks/stripe"} {
+		response := request(t, server, http.MethodPost, endpoint, token, `{}`)
+		if response.Code != http.StatusNotFound {
+			t.Fatalf("removed route %s returned %d", endpoint, response.Code)
+		}
 	}
 }
 
-func TestAuthenticatedChatAndCheckout(t *testing.T) {
+func TestAuthenticatedChat(t *testing.T) {
 	data := store.NewMemory()
-	server := newTestServer(data, stripeStub{})
+	server := newTestServer(data)
 
 	unauthorized := httptest.NewRecorder()
 	server.ServeHTTP(unauthorized, httptest.NewRequest(http.MethodGet, "/v1/me", nil))
@@ -80,7 +62,6 @@ func TestAuthenticatedChatAndCheckout(t *testing.T) {
 	}
 
 	token := authenticate(t, server)
-	_ = data.SetStripeSubscription("gh_42", "cus_42", "sub_42", "active", domain.PlanPlus)
 	chat := request(t, server, http.MethodPost, "/v1/chat", token, `{"messages":[{"role":"user","content":"Hello"}]}`)
 	if chat.Code != http.StatusOK {
 		t.Fatalf("chat status = %d; body = %s", chat.Code, chat.Body.String())
@@ -90,48 +71,16 @@ func TestAuthenticatedChatAndCheckout(t *testing.T) {
 		Usage    domain.Usage `json:"usage"`
 	}
 	decodeResponse(t, chat, &chatBody)
-	if chatBody.Response.Provider != "gemini" || chatBody.Usage.UsedUnits != 35 || chatBody.Usage.RemainingUnits != 9965 {
+	if chatBody.Response.Provider != "gemini" || chatBody.Usage.UsedUnits != 35 || chatBody.Usage.RemainingUnits != 965 {
 		t.Fatalf("unexpected chat response: %#v", chatBody)
 	}
 
-	checkout := request(t, server, http.MethodPost, "/v1/billing/checkout", token, `{}`)
-	if checkout.Code != http.StatusConflict {
-		t.Fatalf("checkout response = %d %s", checkout.Code, checkout.Body.String())
-	}
-}
-
-func TestStripeCheckoutWebhookActivatesPlus(t *testing.T) {
-	data := store.NewMemory()
-	event := billing.Event{ID: "evt_checkout", Type: "checkout.session.completed"}
-	event.Data.Object = json.RawMessage(`{"client_reference_id":"gh_42","customer":"cus_42","subscription":"sub_42","payment_status":"paid"}`)
-	server := newTestServer(data, stripeStub{event: event})
-	token := authenticate(t, server)
-
-	webhook := request(t, server, http.MethodPost, "/v1/webhooks/stripe", "", `{}`)
-	if webhook.Code != http.StatusOK {
-		t.Fatalf("webhook response = %d %s", webhook.Code, webhook.Body.String())
-	}
-	duplicate := request(t, server, http.MethodPost, "/v1/webhooks/stripe", "", `{}`)
-	if duplicate.Code != http.StatusOK {
-		t.Fatalf("duplicate webhook response = %d %s", duplicate.Code, duplicate.Body.String())
-	}
-
-	me := request(t, server, http.MethodGet, "/v1/me", token, "")
-	var body struct {
-		User  domain.User  `json:"user"`
-		Usage domain.Usage `json:"usage"`
-	}
-	decodeResponse(t, me, &body)
-	if body.User.Plan != domain.PlanPlus || body.Usage.LimitUnits != 10_000 {
-		t.Fatalf("plus was not activated: %#v", body)
-	}
 }
 
 func TestOpenAICompatibleRouteAcceptsVisionMessages(t *testing.T) {
 	data := store.NewMemory()
-	server := newTestServer(data, stripeStub{})
+	server := newTestServer(data)
 	token := authenticate(t, server)
-	_ = data.SetStripeSubscription("gh_42", "cus_42", "sub_42", "active", domain.PlanPlus)
 	response := request(t, server, http.MethodPost, "/v1/chat/completions", token, `{
         "model":"managed-standard",
         "messages":[{"role":"user","content":[
@@ -156,10 +105,10 @@ func TestOpenAICompatibleRouteAcceptsVisionMessages(t *testing.T) {
 	}
 }
 
-func newTestServer(data store.Store, stripe StripeBilling) *Server {
+func newTestServer(data store.Store) *Server {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	return New(Config{PublicAppURL: "http://localhost:5173", FreeMonthlyUnits: 1_000, PlusMonthlyUnits: 10_000},
-		githubStub{}, auth.NewSessions("test-session-secret-with-at-least-32-characters"), data, aiStub{}, stripe, logger)
+	return New(Config{PublicAppURL: "http://localhost:5173", FreeMonthlyUnits: 1_000},
+		githubStub{}, auth.NewSessions("test-session-secret-with-at-least-32-characters"), data, aiStub{}, logger)
 }
 
 func authenticate(t *testing.T, server *Server) string {

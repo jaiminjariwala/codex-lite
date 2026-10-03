@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -13,7 +12,6 @@ import (
 
 	"github.com/jaiminjariwala5/computer-browser-use/backend/internal/ai"
 	"github.com/jaiminjariwala5/computer-browser-use/backend/internal/auth"
-	"github.com/jaiminjariwala5/computer-browser-use/backend/internal/billing"
 	"github.com/jaiminjariwala5/computer-browser-use/backend/internal/domain"
 	"github.com/jaiminjariwala5/computer-browser-use/backend/internal/store"
 )
@@ -32,31 +30,26 @@ type AIRouter interface {
 	Complete(context.Context, ai.Request) (ai.Result, error)
 }
 
-type StripeBilling interface {
-	Ready() bool
-	CreateCheckout(context.Context, string, string) (billing.Checkout, error)
-	CreatePortal(context.Context, string) (billing.Checkout, error)
-	VerifyEvent([]byte, string) (billing.Event, error)
-}
-
 type Config struct {
-	StripePublishableKey string
-	GitHubClientID       string
-	GitHubClientSecret   string
-	GitHubRedirectURL    string
-	PublicAppURL         string
-	FreeMonthlyUnits     int64
-	PlusMonthlyUnits     int64
+	GoogleClientID     string
+	GoogleClientSecret string
+	GoogleRedirectURL  string
+	AuthHTTPClient     *http.Client
+	GitHubClientID     string
+	GitHubClientSecret string
+	GitHubRedirectURL  string
+	PublicAppURL       string
+	FreeMonthlyUnits   int64
 }
 
 type Server struct {
+	google   oauthPending
 	oauth    oauthPending
 	config   Config
 	github   GitHubVerifier
 	sessions SessionManager
 	store    store.Store
 	ai       AIRouter
-	stripe   StripeBilling
 	logger   *slog.Logger
 	handler  http.Handler
 }
@@ -65,16 +58,18 @@ type contextKey string
 
 const userContextKey contextKey = "authenticated-user"
 
-func New(config Config, github GitHubVerifier, sessions SessionManager, data store.Store, router AIRouter, stripe StripeBilling, logger *slog.Logger) *Server {
+func New(config Config, github GitHubVerifier, sessions SessionManager, data store.Store, router AIRouter, logger *slog.Logger) *Server {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	server := &Server{config: config, github: github, sessions: sessions, store: data, ai: router, stripe: stripe, logger: logger}
+	server := &Server{config: config, github: github, sessions: sessions, store: data, ai: router, logger: logger}
 	server.oauth.entries = make(map[string]*oauthAttempt)
+	server.google.entries = make(map[string]*oauthAttempt)
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", server.health)
-	mux.HandleFunc("GET /checkout", server.checkoutPage)
-	mux.HandleFunc("GET /checkout/return", server.checkoutReturn)
+	mux.HandleFunc("POST /v1/auth/google/start", server.googleStart)
+	mux.HandleFunc("POST /v1/auth/google/poll", server.googlePoll)
+	mux.HandleFunc("GET /v1/auth/google/callback", server.googleCallback)
 	mux.HandleFunc("POST /v1/auth/github", server.githubExchange)
 	mux.HandleFunc("POST /v1/auth/github/start", server.oauthStart)
 	mux.HandleFunc("POST /v1/auth/github/poll", server.oauthPoll)
@@ -83,9 +78,6 @@ func New(config Config, github GitHubVerifier, sessions SessionManager, data sto
 	mux.Handle("GET /v1/usage", server.authenticate(http.HandlerFunc(server.usage)))
 	mux.Handle("POST /v1/chat", server.authenticate(http.HandlerFunc(server.chat)))
 	mux.Handle("POST /v1/chat/completions", server.authenticate(http.HandlerFunc(server.chatCompletions)))
-	mux.Handle("POST /v1/billing/checkout", server.authenticate(http.HandlerFunc(server.checkout)))
-	mux.Handle("POST /v1/billing/portal", server.authenticate(http.HandlerFunc(server.portal)))
-	mux.HandleFunc("POST /v1/webhooks/stripe", server.stripeWebhook)
 	server.handler = server.recoverPanic(server.cors(mux))
 	return server
 }
@@ -94,7 +86,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) { s.handler.S
 
 func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
-		"ok": true, "ai_configured": s.ai.Available(), "stripe_configured": s.stripe.Ready(),
+		"ok": true, "ai_configured": s.ai.Available(),
+		"google_auth_configured": s.config.GoogleClientID != "" && s.config.GoogleClientSecret != "" && s.config.GoogleRedirectURL != "",
 	})
 }
 
@@ -211,9 +204,6 @@ func (s *Server) chatCompletions(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) complete(ctx context.Context, user domain.User, input ai.Request) (ai.Result, domain.Usage, int, string) {
-	if user.Plan != domain.PlanPlus || user.SubscriptionStatus != "active" {
-		return ai.Result{}, domain.Usage{}, http.StatusPaymentRequired, "Desktop access requires the $1/month subscription"
-	}
 	usage, err := s.currentUsage(user, time.Now())
 	if err != nil {
 		return ai.Result{}, domain.Usage{}, http.StatusInternalServerError, "Could not load usage"
@@ -224,7 +214,7 @@ func (s *Server) complete(ctx context.Context, user domain.User, input ai.Reques
 	result, err := s.ai.Complete(ctx, input)
 	if err != nil {
 		s.logger.Error("managed AI request failed", "user_id", user.ID, "error", err)
-		return ai.Result{}, usage, http.StatusServiceUnavailable, "Free AI providers are unavailable or their shared quota is exhausted. Please try again later; the app fee does not guarantee model availability."
+		return ai.Result{}, usage, http.StatusServiceUnavailable, "Free AI providers are unavailable or their shared quota is exhausted. Please try again later"
 	}
 	units := result.Usage.TotalTokens
 	if units <= 0 {
@@ -235,129 +225,6 @@ func (s *Server) complete(ctx context.Context, user domain.User, input ai.Reques
 		return ai.Result{}, usage, http.StatusTooManyRequests, "Monthly usage limit reached"
 	}
 	return result, usage, http.StatusOK, ""
-}
-
-func (s *Server) checkout(w http.ResponseWriter, r *http.Request) {
-	user := currentUser(r.Context())
-	if user.Plan == domain.PlanPlus && user.SubscriptionStatus == "active" {
-		writeError(w, http.StatusConflict, "Desktop access is already active. Manage your subscription instead.")
-		return
-	}
-	checkout, err := s.stripe.CreateCheckout(r.Context(), user.ID, user.Email)
-	if err != nil {
-		s.logger.Error("stripe checkout creation failed", "user_id", user.ID, "error", err)
-		writeError(w, http.StatusServiceUnavailable, "Checkout is not available yet")
-		return
-	}
-	writeJSON(w, http.StatusOK, checkout)
-}
-
-func (s *Server) portal(w http.ResponseWriter, r *http.Request) {
-	user := currentUser(r.Context())
-	portal, err := s.stripe.CreatePortal(r.Context(), user.StripeCustomerID)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "No billing account is available")
-		return
-	}
-	writeJSON(w, http.StatusOK, portal)
-}
-
-func (s *Server) stripeWebhook(w http.ResponseWriter, r *http.Request) {
-	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
-	payload, err := io.ReadAll(r.Body)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "Invalid webhook body")
-		return
-	}
-	event, err := s.stripe.VerifyEvent(payload, r.Header.Get("Stripe-Signature"))
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "Invalid webhook signature")
-		return
-	}
-	processed, err := s.store.EventProcessed(event.ID)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Could not process webhook")
-		return
-	}
-	if processed {
-		writeJSON(w, http.StatusOK, map[string]bool{"received": true})
-		return
-	}
-	if err := s.applyStripeEvent(event); err != nil {
-		s.logger.Error("stripe event application failed", "event_id", event.ID, "event_type", event.Type, "error", err)
-		writeError(w, http.StatusInternalServerError, "Could not apply webhook")
-		return
-	}
-	if err := s.store.MarkEventProcessed(event.ID); err != nil {
-		writeError(w, http.StatusInternalServerError, "Could not finish webhook")
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]bool{"received": true})
-}
-
-func (s *Server) applyStripeEvent(event billing.Event) error {
-	switch event.Type {
-	case "checkout.session.completed":
-		var object struct {
-			ClientReferenceID string `json:"client_reference_id"`
-			Customer          string `json:"customer"`
-			Subscription      string `json:"subscription"`
-			PaymentStatus     string `json:"payment_status"`
-		}
-		if err := json.Unmarshal(event.Data.Object, &object); err != nil || object.ClientReferenceID == "" {
-			return errors.New("checkout session has no app user")
-		}
-		if object.PaymentStatus != "paid" || object.Customer == "" || object.Subscription == "" {
-			return nil
-		}
-		return s.store.SetStripeSubscription(object.ClientReferenceID, object.Customer, object.Subscription, "active", domain.PlanPlus)
-	case "invoice.paid":
-		return s.setPlanByCustomer(event.Data.Object, "active", domain.PlanPlus)
-	case "invoice.payment_failed":
-		return s.setPlanByCustomer(event.Data.Object, "past_due", domain.PlanFree)
-	case "customer.subscription.updated":
-		var object struct {
-			Customer string `json:"customer"`
-			ID       string `json:"id"`
-			Status   string `json:"status"`
-		}
-		if err := json.Unmarshal(event.Data.Object, &object); err != nil {
-			return err
-		}
-		plan := domain.PlanFree
-		if object.Status == "active" {
-			plan = domain.PlanPlus
-		}
-		user, err := s.store.UserByStripeCustomer(object.Customer)
-		if err != nil {
-			return err
-		}
-		return s.store.SetStripeSubscription(user.ID, object.Customer, object.ID, object.Status, plan)
-	case "customer.subscription.deleted":
-		return s.setPlanByCustomer(event.Data.Object, "canceled", domain.PlanFree)
-	default:
-		return nil
-	}
-}
-
-func (s *Server) setPlanByCustomer(raw json.RawMessage, status string, plan domain.Plan) error {
-	var object struct {
-		Customer     string `json:"customer"`
-		Subscription string `json:"subscription"`
-		ID           string `json:"id"`
-	}
-	if err := json.Unmarshal(raw, &object); err != nil || object.Customer == "" {
-		return errors.New("stripe event has no customer")
-	}
-	user, err := s.store.UserByStripeCustomer(object.Customer)
-	if err != nil {
-		return err
-	}
-	subscriptionID := object.Subscription
-	if subscriptionID == "" {
-		subscriptionID = object.ID
-	}
-	return s.store.SetStripeSubscription(user.ID, object.Customer, subscriptionID, status, plan)
 }
 
 func (s *Server) authenticate(next http.Handler) http.Handler {
@@ -382,7 +249,7 @@ func (s *Server) authenticate(next http.Handler) http.Handler {
 }
 
 func (s *Server) currentUsage(user domain.User, now time.Time) (domain.Usage, error) {
-	return s.store.Usage(user.ID, s.config.FreeMonthlyUnits, s.config.PlusMonthlyUnits, now)
+	return s.store.Usage(user.ID, s.config.FreeMonthlyUnits, now)
 }
 
 func currentUser(ctx context.Context) domain.User {
@@ -482,7 +349,7 @@ func (s *Server) cors(next http.Handler) http.Handler {
 		if origin != "" && origin == s.config.PublicAppURL {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Vary", "Origin")
-			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, Stripe-Signature")
+			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 		}
 		if r.Method == http.MethodOptions {

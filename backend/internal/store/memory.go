@@ -13,29 +13,22 @@ var ErrNotFound = errors.New("not found")
 
 type Store interface {
 	UpsertGitHubUser(user domain.User) (domain.User, error)
+	UpsertGoogleUser(user domain.User) (domain.User, error)
 	UserByID(id string) (domain.User, error)
-	UserByStripeCustomer(customerID string) (domain.User, error)
-	SetStripeSubscription(userID, customerID, subscriptionID, status string, plan domain.Plan) error
 	ChargeUsage(userID string, units, limit int64, now time.Time) (domain.Usage, error)
-	Usage(userID string, freeLimit, plusLimit int64, now time.Time) (domain.Usage, error)
-	EventProcessed(eventID string) (bool, error)
-	MarkEventProcessed(eventID string) error
+	Usage(userID string, limit int64, now time.Time) (domain.Usage, error)
 }
 
 type Memory struct {
-	mu             sync.Mutex
-	users          map[string]domain.User
-	githubToUser   map[int64]string
-	stripeToUser   map[string]string
-	processedEvent map[string]struct{}
+	mu           sync.Mutex
+	users        map[string]domain.User
+	githubToUser map[int64]string
 }
 
 func NewMemory() *Memory {
 	return &Memory{
-		users:          make(map[string]domain.User),
-		githubToUser:   make(map[int64]string),
-		stripeToUser:   make(map[string]string),
-		processedEvent: make(map[string]struct{}),
+		users:        make(map[string]domain.User),
+		githubToUser: make(map[int64]string),
 	}
 }
 
@@ -52,10 +45,26 @@ func (m *Memory) UpsertGitHubUser(input domain.User) (domain.User, error) {
 		input.ID = fmt.Sprintf("gh_%d", input.GitHubID)
 	}
 	input.Plan = domain.PlanFree
-	input.SubscriptionStatus = "inactive"
 	input.UsagePeriodStart = monthStart(time.Now().UTC())
 	m.users[input.ID] = input
 	m.githubToUser[input.GitHubID] = input.ID
+	return input, nil
+}
+
+func (m *Memory) UpsertGoogleUser(input domain.User) (domain.User, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if input.ID == "" || input.Email == "" {
+		return domain.User{}, errors.New("verified Google identity required")
+	}
+	if existing, ok := m.users[input.ID]; ok {
+		existing.Email, existing.Login, existing.Name, existing.AvatarURL = input.Email, input.Email, input.Name, input.AvatarURL
+		m.users[input.ID] = existing
+		return existing, nil
+	}
+	input.Login, input.Plan = input.Email, domain.PlanFree
+	input.UsagePeriodStart = monthStart(time.Now().UTC())
+	m.users[input.ID] = input
 	return input, nil
 }
 
@@ -67,34 +76,6 @@ func (m *Memory) UserByID(id string) (domain.User, error) {
 		return domain.User{}, ErrNotFound
 	}
 	return user, nil
-}
-
-func (m *Memory) UserByStripeCustomer(customerID string) (domain.User, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	id, ok := m.stripeToUser[customerID]
-	if !ok {
-		return domain.User{}, ErrNotFound
-	}
-	return m.users[id], nil
-}
-
-func (m *Memory) SetStripeSubscription(userID, customerID, subscriptionID, status string, plan domain.Plan) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	user, ok := m.users[userID]
-	if !ok {
-		return ErrNotFound
-	}
-	user.StripeCustomerID = customerID
-	user.StripeSubscriptionID = subscriptionID
-	user.SubscriptionStatus = status
-	user.Plan = plan
-	m.users[userID] = user
-	if customerID != "" {
-		m.stripeToUser[customerID] = userID
-	}
-	return nil
 }
 
 func (m *Memory) ChargeUsage(userID string, units, limit int64, now time.Time) (domain.Usage, error) {
@@ -113,7 +94,7 @@ func (m *Memory) ChargeUsage(userID string, units, limit int64, now time.Time) (
 	return usageFor(user, limit), nil
 }
 
-func (m *Memory) Usage(userID string, freeLimit, plusLimit int64, now time.Time) (domain.Usage, error) {
+func (m *Memory) Usage(userID string, limit int64, now time.Time) (domain.Usage, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	user, ok := m.users[userID]
@@ -122,25 +103,7 @@ func (m *Memory) Usage(userID string, freeLimit, plusLimit int64, now time.Time)
 	}
 	resetUsageIfNeeded(&user, now)
 	m.users[userID] = user
-	limit := freeLimit
-	if user.Plan == domain.PlanPlus {
-		limit = plusLimit
-	}
 	return usageFor(user, limit), nil
-}
-
-func (m *Memory) EventProcessed(eventID string) (bool, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	_, exists := m.processedEvent[eventID]
-	return exists, nil
-}
-
-func (m *Memory) MarkEventProcessed(eventID string) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.processedEvent[eventID] = struct{}{}
-	return nil
 }
 
 func resetUsageIfNeeded(user *domain.User, now time.Time) {
@@ -161,7 +124,7 @@ func usageFor(user domain.User, limit int64) domain.Usage {
 		remaining = 0
 	}
 	return domain.Usage{
-		Plan:           user.Plan,
+		Plan:           domain.PlanFree,
 		UsedUnits:      user.UsedUnits,
 		LimitUnits:     limit,
 		RemainingUnits: remaining,

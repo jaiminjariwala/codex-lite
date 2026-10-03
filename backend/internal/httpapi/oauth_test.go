@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"github.com/jaiminjariwala5/computer-browser-use/backend/internal/store"
-	"net/http"
 	"net/url"
 	"strings"
 	"testing"
@@ -13,7 +12,7 @@ import (
 )
 
 func TestBrowserOAuthHandoff(t *testing.T) {
-	s := newTestServer(store.NewMemory(), stripeStub{})
+	s := newTestServer(store.NewMemory())
 	if got := request(t, s, "POST", "/v1/auth/github/start", "", `{}`); got.Code != 503 {
 		t.Fatal(got.Code)
 	}
@@ -52,7 +51,7 @@ func TestBrowserOAuthHandoff(t *testing.T) {
 }
 
 func TestOAuthCallbackAndExpiration(t *testing.T) {
-	s := newTestServer(store.NewMemory(), stripeStub{})
+	s := newTestServer(store.NewMemory())
 	if got := request(t, s, "GET", "/v1/auth/github/callback?state=unknown", "", ""); got.Code != 400 {
 		t.Fatal(got.Code)
 	}
@@ -66,17 +65,5 @@ func TestOAuthCallbackAndExpiration(t *testing.T) {
 	}
 	if s.oauth.entries["denied"].failure == "" {
 		t.Fatal("missing denial")
-	}
-}
-
-func TestCustomCheckoutPage(t *testing.T) {
-	s := newTestServer(store.NewMemory(), stripeStub{})
-	if got := request(t, s, "GET", "/checkout", "", ""); got.Code != 503 {
-		t.Fatal(got.Code)
-	}
-	s.config.StripePublishableKey = "pk_test_example"
-	got := request(t, s, http.MethodGet, "/checkout", "", "")
-	if got.Code != 200 || !strings.Contains(got.Body.String(), "initCheckoutElementsSdk") || got.Header().Get("Cache-Control") != "no-store" {
-		t.Fatal("invalid checkout page")
 	}
 }

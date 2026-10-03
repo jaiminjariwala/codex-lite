@@ -15,25 +15,19 @@ import (
 const schema = `
 CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
-    github_id BIGINT NOT NULL UNIQUE,
+    github_id BIGINT UNIQUE,
     login TEXT NOT NULL,
     name TEXT NOT NULL DEFAULT '',
     email TEXT NOT NULL DEFAULT '',
     avatar_url TEXT NOT NULL DEFAULT '',
     plan TEXT NOT NULL DEFAULT 'free' CHECK (plan IN ('free', 'plus')),
-    stripe_customer_id TEXT UNIQUE,
-    stripe_subscription_id TEXT NOT NULL DEFAULT '',
-    subscription_status TEXT NOT NULL DEFAULT 'inactive',
     used_units BIGINT NOT NULL DEFAULT 0 CHECK (used_units >= 0),
     usage_period_start TIMESTAMPTZ NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-
-CREATE TABLE IF NOT EXISTS processed_stripe_events (
-    event_id TEXT PRIMARY KEY,
-    processed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
+-- Additive migration only. Old billing columns are left unused, not deleted.
+ALTER TABLE users ALTER COLUMN github_id DROP NOT NULL;
 `
 
 type Postgres struct {
@@ -75,33 +69,29 @@ func (p *Postgres) UpsertGitHubUser(input domain.User) (domain.User, error) {
             email = EXCLUDED.email,
             avatar_url = EXCLUDED.avatar_url,
             updated_at = NOW()
-        RETURNING id, github_id, login, name, email, avatar_url, plan,
-            COALESCE(stripe_customer_id, ''), stripe_subscription_id,
-            subscription_status, used_units, usage_period_start`,
+        RETURNING id, COALESCE(github_id, 0), login, name, email, avatar_url, plan,
+            used_units, usage_period_start`,
 		input.ID, input.GitHubID, input.Login, input.Name, input.Email, input.AvatarURL, monthStart(time.Now().UTC()))
 	return scanUser(row)
 }
 
+func (p *Postgres) UpsertGoogleUser(input domain.User) (domain.User, error) {
+	if input.ID == "" || input.Email == "" {
+		return domain.User{}, errors.New("verified Google identity required")
+	}
+	_, err := p.pool.Exec(context.Background(), `
+		INSERT INTO users (id, login, email, name, avatar_url, usage_period_start)
+		VALUES ($1, $2, $2, $3, $4, $5)
+		ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email, login = EXCLUDED.login, name = EXCLUDED.name, avatar_url = EXCLUDED.avatar_url, updated_at = NOW()
+	`, input.ID, input.Email, input.Name, input.AvatarURL, monthStart(time.Now().UTC()))
+	if err != nil {
+		return domain.User{}, err
+	}
+	return p.UserByID(input.ID)
+}
+
 func (p *Postgres) UserByID(id string) (domain.User, error) {
 	return scanUser(p.pool.QueryRow(context.Background(), userSelect+` WHERE id = $1`, id))
-}
-
-func (p *Postgres) UserByStripeCustomer(customerID string) (domain.User, error) {
-	return scanUser(p.pool.QueryRow(context.Background(), userSelect+` WHERE stripe_customer_id = $1`, customerID))
-}
-
-func (p *Postgres) SetStripeSubscription(userID, customerID, subscriptionID, status string, plan domain.Plan) error {
-	tag, err := p.pool.Exec(context.Background(), `
-        UPDATE users SET stripe_customer_id = NULLIF($2, ''), stripe_subscription_id = $3,
-            subscription_status = $4, plan = $5, updated_at = NOW()
-        WHERE id = $1`, userID, customerID, subscriptionID, status, plan)
-	if err != nil {
-		return err
-	}
-	if tag.RowsAffected() == 0 {
-		return ErrNotFound
-	}
-	return nil
 }
 
 func (p *Postgres) ChargeUsage(userID string, units, limit int64, now time.Time) (domain.Usage, error) {
@@ -133,7 +123,7 @@ func (p *Postgres) ChargeUsage(userID string, units, limit int64, now time.Time)
 	return usageFor(user, limit), nil
 }
 
-func (p *Postgres) Usage(userID string, freeLimit, plusLimit int64, now time.Time) (domain.Usage, error) {
+func (p *Postgres) Usage(userID string, limit int64, now time.Time) (domain.Usage, error) {
 	tx, err := p.pool.BeginTx(context.Background(), pgx.TxOptions{})
 	if err != nil {
 		return domain.Usage{}, err
@@ -155,30 +145,11 @@ func (p *Postgres) Usage(userID string, freeLimit, plusLimit int64, now time.Tim
 	if err := tx.Commit(context.Background()); err != nil {
 		return domain.Usage{}, err
 	}
-	limit := freeLimit
-	if user.Plan == domain.PlanPlus {
-		limit = plusLimit
-	}
 	return usageFor(user, limit), nil
 }
 
-func (p *Postgres) EventProcessed(eventID string) (bool, error) {
-	var exists bool
-	err := p.pool.QueryRow(context.Background(), `
-        SELECT EXISTS (SELECT 1 FROM processed_stripe_events WHERE event_id = $1)`, eventID).Scan(&exists)
-	return exists, err
-}
-
-func (p *Postgres) MarkEventProcessed(eventID string) error {
-	_, err := p.pool.Exec(context.Background(), `
-        INSERT INTO processed_stripe_events (event_id) VALUES ($1)
-        ON CONFLICT (event_id) DO NOTHING`, eventID)
-	return err
-}
-
-const userSelect = `SELECT id, github_id, login, name, email, avatar_url, plan,
-    COALESCE(stripe_customer_id, ''), stripe_subscription_id,
-    subscription_status, used_units, usage_period_start FROM users`
+const userSelect = `SELECT id, COALESCE(github_id, 0), login, name, email, avatar_url, plan,
+    used_units, usage_period_start FROM users`
 
 type rowScanner interface {
 	Scan(...any) error
@@ -187,8 +158,7 @@ type rowScanner interface {
 func scanUser(row rowScanner) (domain.User, error) {
 	var user domain.User
 	err := row.Scan(&user.ID, &user.GitHubID, &user.Login, &user.Name, &user.Email,
-		&user.AvatarURL, &user.Plan, &user.StripeCustomerID, &user.StripeSubscriptionID,
-		&user.SubscriptionStatus, &user.UsedUnits, &user.UsagePeriodStart)
+		&user.AvatarURL, &user.Plan, &user.UsedUnits, &user.UsagePeriodStart)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.User{}, ErrNotFound
 	}

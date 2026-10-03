@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
+import { AccountAvatar } from './AccountAvatar'
 import type {
     GitHubAuthStatus,
     GitHubDeviceChallenge,
@@ -287,11 +288,7 @@ export function ChatSidebar({
                     <div className="glass-account-menu" role="menu" aria-label="Account menu">
                         {onShowAccounts && <button type="button" className="glass-account-menu__item" onClick={() => { setAccountMenuOpen(false); onShowAccounts() }}>Accounts</button>}
                         <div className="glass-account-menu__identity">
-                            {authStatus?.user?.avatarUrl ? (
-                                <img src={authStatus.user.avatarUrl} alt="" />
-                            ) : (
-                                <span className="glass-account-menu__avatar" aria-hidden="true">{accountInitial}</span>
-                            )}
+                            <AccountAvatar url={authStatus?.user?.avatarUrl} initial={accountInitial} fallbackClassName="glass-account-menu__avatar" />
                             <span>{account.primary}</span>
                         </div>
                         <button
@@ -329,9 +326,7 @@ export function ChatSidebar({
                         aria-expanded={signedIn ? accountMenuOpen : undefined}
                     >
                         <span className="glass-account__avatar">
-                            {authStatus?.user?.avatarUrl
-                                ? <img src={authStatus.user.avatarUrl} alt="" />
-                                : <span aria-hidden="true">{accountInitial}</span>}
+                            <AccountAvatar url={authStatus?.user?.avatarUrl} initial={accountInitial} />
                         </span>
                         <span className="glass-nav__footer-copy">
                             <span>{account.primary}</span>

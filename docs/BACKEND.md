@@ -1,85 +1,67 @@
-# Backend and sandbox setup
+# Backend and account setup
 
-The Go backend connects identity, sessions and subscription access. It does not run the default local Qwen inference.
+The Go service on Render handles Google and GitHub OAuth, app sessions and account storage. PostgreSQL on Supabase stores accounts. Supabase Auth, SMTP, email codes and SMS are not used. Local Ollama on the Mac handles default AI inference.
 
-## Request flow
+## Google browser sign-in
 
 ```text
-Desktop                 Go on Render       GitHub / Stripe       Supabase
-   |                          |                    |                 |
-   |-- start GitHub login --->|-- authorize ------>|                 |
-   |                          |<-- callback -------|                 |
-   |                          |-- account/session ----------------->|
-   |<-- app session ----------|                    |                 |
-   |                          |                    |                 |
-   |-- create checkout ------>|-- sandbox session->|                 |
-   |<-- checkout URL ---------|                    |                 |
-   |---- browser test checkout ------------------->|                 |
-   |                          |<-- signed webhook --|                 |
-   |                          |-- update subscription ------------->|
-   |-- refresh account ------>|                    |                 |
-   |<-- access state ---------|                    |                 |
+Desktop main process -> Go /v1/auth/google/start
+                            |
+System browser -> Google account selection -> Go /v1/auth/google/callback
+                                                |
+                         code exchange + authenticated Google userinfo
+                                                |
+                               PostgreSQL user keyed by Google subject
+                                                |
+Desktop encrypted vault <- one-time secret-protected poll <- Go app session
 ```
 
-## Deployment shape
+Random state and PKCE bind each authorization. A separate random polling secret protects the one-time handoff. Google access tokens are used only on the server to fetch verified identity over HTTPS, then discarded. Neither provider tokens nor app session tokens reach React. Login attempts expire after ten minutes; a server restart cancels pending attempts, not already-issued sessions. Pending attempts are bounded to 1,000 per provider and stored in memory, so this implementation requires one backend instance rather than a load-balanced multi-instance deployment.
 
-Use the existing `backend/Dockerfile` with the `backend` directory as its build context. Its Go build copies `go.mod`, `go.sum`, `cmd` and `internal` from that context.
+Google and GitHub identities are separate accounts, even when the email matches. Google users are keyed by their stable subject, not their email. Previously saved email sessions are preserved until expiry, but email-code endpoints are removed. The chooser lists only accounts authenticated on this Mac. Chats and memory remain shared device-local workspace data; switching accounts does not isolate local chat history.
 
-Render runs the API container. Supabase supplies PostgreSQL. Choose the appropriate pooled connection string for your host's network support. Percent-encode special characters in the password portion of a database URI, for example `@` becomes `%40`.
+## Google setup required
 
-Keep the chosen hosting plans and billing settings under review. This guide does not promise zero hosting costs or uninterrupted availability.
+1. In Google Cloud Console, create/select your project and open Google Auth Platform.
+2. Configure Branding and Audience for external users. While the project is in Testing, add your own account as a test user.
+3. Under Clients, create an OAuth client of type **Web application**, because the Go server receives the callback and holds the client secret. Do not use a Desktop client with this server-mediated flow.
+4. Add the exact authorized redirect URI: `https://YOUR-BACKEND/v1/auth/google/callback`. Use `http://127.0.0.1:8787/v1/auth/google/callback` only for local development.
+5. Set the three Google environment variables below on Render and deploy the updated backend. Never put the client secret in Electron, a screenshot, chat, or Git.
+6. Request only `openid email profile`, not Gmail, Drive or other API permissions. Before distributing publicly, switch the audience to production and satisfy Google's applicable consent/branding requirements.
+7. Test Google and GitHub login, denial, second-account selection, switching, sign-out and restart persistence. Automated tests use mocked Google responses, not real accounts.
 
-## Backend environment
+Reference: [Google server-side OpenID Connect](https://developers.google.com/identity/openid-connect/openid-connect).
 
-| Name | Value |
+| Backend variable | Purpose |
 | --- | --- |
 | DATABASE_URL | Private PostgreSQL connection URI |
-| SESSION_SECRET | Random secret with at least 32 characters |
-| GITHUB_OAUTH_CLIENT_ID | OAuth application's client ID |
-| GITHUB_OAUTH_CLIENT_SECRET | OAuth application's private secret |
+| SESSION_SECRET | Random secret, at least 32 characters |
+| GITHUB_OAUTH_CLIENT_ID | GitHub OAuth public client ID |
+| GITHUB_OAUTH_CLIENT_SECRET | GitHub OAuth private client secret |
 | GITHUB_OAUTH_REDIRECT_URL | https://YOUR-BACKEND/v1/auth/github/callback |
-| STRIPE_SECRET_KEY | Sandbox sk_test_ key |
-| STRIPE_PUBLISHABLE_KEY | Matching sandbox pk_test_ key |
-| STRIPE_PLUS_PRICE_ID | Sandbox price_ ID for the $1 USD monthly recurring price |
-| CHECKOUT_URL | https://YOUR-BACKEND/checkout |
-| STRIPE_WEBHOOK_SECRET | Signing secret of the hosted sandbox destination |
+| GOOGLE_OAUTH_CLIENT_ID | Google Web application client ID |
+| GOOGLE_OAUTH_CLIENT_SECRET | Google private client secret, server only |
+| GOOGLE_OAUTH_REDIRECT_URL | https://YOUR-BACKEND/v1/auth/google/callback |
+| FREE_MONTHLY_UNITS | Optional hosted-AI allowance; does not limit local Ollama |
 
-Use the same callback URL in GitHub. Do not use a Product ID beginning with `prod_` in place of the Price ID. Keep all Stripe values in the same sandbox.
+Use each provider's exact callback URL in its console. Only the Go backend's public URL is embedded in the desktop build. Supabase is used only as PostgreSQL hosting through DATABASE_URL; its Auth configuration is not needed.
 
-Optional legacy hosted-AI environment settings are not required for local Qwen chat. The health endpoint's `ai_configured` field describes the hosted AI router, not local model readiness.
+## Deployment
 
-## Stripe event destination
+Use `backend/Dockerfile` with the backend directory as the build context. Render hosts Go; Supabase hosts PostgreSQL. The database migration allows non-GitHub users to have no GitHub ID. Existing accounts, old payment columns and historical records are preserved, but no active code reads or writes payment data.
 
-Endpoint: `https://YOUR-BACKEND/v1/webhooks/stripe`.
-
-Use snapshot events from your account:
-
-- checkout.session.completed
-- invoice.paid
-- invoice.payment_failed
-- customer.subscription.updated
-- customer.subscription.deleted
-
-Copy the new destination's `whsec_` signing secret into backend configuration. The Stripe CLI's local listener secret is different. Match the event API version to the backend's supported Stripe payloads and inspect logs if event decoding fails.
-
-## Test checklist
-
-1. Redeploy after saving environment values.
-2. Check `GET /health`. Configuration presence is not proof that the credentials work.
-3. Sign in from the desktop app.
-4. Open sandbox checkout and confirm the demo notice.
-5. Use 4242 4242 4242 4242, a future expiry, and any three-digit CVC.
-6. Verify successful Stripe event delivery.
-7. Return to the app and confirm access activates.
-8. Restart the app and verify account state persists.
-9. Test cancellation and subscription updates separately.
-
-Never use real card details for this demo. A public backend can still use Stripe sandbox; public hosting does not require live payments.
+Payments, checkout pages, Stripe webhooks and subscription gates have been removed. After deploying this change, remove obsolete Stripe environment variables and disable the old webhook destination in Stripe. These external changes are not made automatically. Previously published desktop binaries still contain their old payment UI, so distribute a newly built version.
 
 ## API surface
 
-Account: `/v1/auth/github/start`, `/v1/auth/github/poll`, `/v1/auth/github/callback`, `/v1/me`.
+- Google: POST /v1/auth/google/start, POST /v1/auth/google/poll, GET /v1/auth/google/callback.
+- GitHub: POST /v1/auth/github, POST /v1/auth/github/start, POST /v1/auth/github/poll, GET /v1/auth/github/callback.
+- Authenticated account: GET /v1/me, GET /v1/usage.
+- Optional hosted inference: POST /v1/chat, POST /v1/chat/completions.
+- Health: GET /health. Hosted AI readiness is distinct from local model readiness.
 
-Billing: `/v1/billing/checkout`, `/v1/billing/portal`, `/v1/webhooks/stripe`, `/checkout`, `/checkout/return`.
+Permissions are separate from sign-in. Microphone access is requested only on Allow, not during startup. Accessibility is optional for approved app-control tasks, not required to dictate inside Codex Lite.
 
-The backend also retains authenticated usage and cloud chat endpoints. The standard desktop Qwen client calls local Ollama instead.
+App sessions expire after 30 days. Logout removes the selected local session but is not server-wide session revocation. Production work should add distributed abuse controls, persistent OAuth handoffs, session revocation and bot protection as needed.
+
+There are no email/SMS delivery charges in this login flow. Hosting plans retain their own limits and costs; free Render can sleep and delay sign-in after inactivity. Do not promise an always-on service or a production SLA on free infrastructure.

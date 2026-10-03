@@ -36,7 +36,7 @@ Region/window/full-screen shortcuts, screenshot attachments, PDF page rendering,
 
 ## Accounts and demo access
 
-Hosted GitHub OAuth, Go sessions, PostgreSQL account state, Stripe sandbox checkout and signed subscription webhooks. The public demo is simulated billing, not a paid subscription offer.
+Google and GitHub browser sign-in, Go app sessions, PostgreSQL account state, and an encrypted multi-account chooser. First-run microphone and optional Accessibility setup. No email codes, SMS, payments, upgrade screens or subscription access gate.
 
 ## Experimental modules
 

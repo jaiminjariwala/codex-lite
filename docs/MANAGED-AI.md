@@ -1,10 +1,10 @@
 # Local AI and online app access
 
-The desktop runs Qwen Coder and Qwen3-VL through a private Ollama process on the Mac. Account access still goes through the hosted Go API.
+The desktop runs Qwen3.5 9B through a private Ollama process on the Mac. Account access still goes through the hosted Go API.
 
 Settings contains download progress, pause and retry. The input footer shows a short progress label and reports text and screenshot readiness only after verification. Text can remain available if the screenshot download fails. Setup checks for at least 7 GB free disk space.
 
-The public portfolio checkout uses Stripe sandbox. The displayed $1 subscription is simulated and must not be described as money collected from customers. Use only test cards in this demo.
+There is no subscription or payment requirement. Sign-in supports Google and GitHub.
 
 Local chat does not consume the legacy backend cloud-AI usage meter. Provider infrastructure remains for older or experimental paths, but should not be confused with the current default route.
 

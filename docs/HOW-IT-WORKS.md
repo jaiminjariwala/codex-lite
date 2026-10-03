@@ -1,10 +1,10 @@
 # How Codex Lite works
 
-The desktop app is the workspace. Ollama is the local model runner. The Go backend is the account service. PostgreSQL remembers account and subscription data.
+The desktop app is the workspace. Ollama is the local model runner. The Go backend is the account service. PostgreSQL remembers account data.
 
 ## Asking a question
 
-The app sends text to Qwen Coder on your Mac. For ordinary image-containing chat, it chooses Qwen3-VL instead. Your chats and editable memory are stored locally.
+The app sends text to Qwen3.5 9B on your Mac for both text and screenshot understanding. Your chats and editable memory are stored locally.
 
 When you ask for internet search, the app retrieves search snippets and asks the local model to answer from them. Searching and answering are separate steps. A successful lookup can still lead to a poor model answer, so the app checks for a sourced final response and retries once. It cannot guarantee correctness.
 
@@ -25,19 +25,11 @@ App <- account session <- Go callback
 
 The server holds the OAuth client secret. The desktop app does not.
 
-## Trying the subscription demo
+## Google sign-in and account switching
 
-```text
-App -> hosted checkout -> Stripe sandbox
-                            |
-                       signed webhook
-                            |
-App <- refreshed access <- Go + PostgreSQL
-```
+Go creates a short-lived Google browser authorization with state and PKCE. Its callback exchanges the code and reads verified identity directly from Google's authenticated userinfo endpoint. Go issues an app session keyed by Google's stable subject. The desktop retrieves it with a one-time secret-protected poll and stores it in an encrypted vault. The renderer never receives tokens.
 
-A successful redirect alone does not prove that access has been activated. The server receives and verifies the Stripe event and updates account state.
-
-The public demo uses test cards, not real money. Do not switch to live keys to demonstrate the resume project.
+There is no checkout or subscription gate. Each Google and GitHub identity is kept separate unless an explicit, verified linking flow is added later. Saved chats and memory remain device-local, not account-isolated cloud data.
 
 ## What the cloud is for
 

@@ -8,11 +8,11 @@ This guide describes the current local-model desktop build.
 2. Install dependencies with `npm install`.
 3. Create an ignored `.env.local` with `MANAGED_BACKEND_URL=https://YOUR-BACKEND`.
 4. Run `npm run dev`.
-5. Sign in with GitHub through the configured backend.
-6. If access is required, finish the clearly marked Stripe sandbox checkout using a test card.
+5. Sign in with Google or GitHub through the configured backend. See [OAuth setup](BACKEND.md).
+6. Choose your account and allow or skip microphone and optional Accessibility setup.
 7. Open Settings to inspect local model setup.
 
-The app prepares a private Ollama server and downloads Qwen Coder and Qwen3-VL when missing. Allow several gigabytes of network transfer and at least 7 GB free disk space for setup. Download speed depends on your connection and the model registry.
+The app prepares a private Ollama server and downloads Qwen3.5 9B when missing. Allow several gigabytes of network transfer and at least 7 GB free disk space for setup. Download speed depends on your connection and the model registry.
 
 Text can work once its model is installed, even if the vision download later fails. Use Resume / retry in Settings for interrupted setup. The status below the input reports progress and only reports both models ready when setup has completed.
 
@@ -44,8 +44,8 @@ The workspace smoke test uses fake IPC and Chrome. The search smoke test makes r
 
 | Symptom | Check |
 | --- | --- |
-| Checkout unavailable | Backend Stripe key, sandbox price ID, checkout URL and webhook signing secret. |
-| Checkout returned but access is locked | Stripe event delivery and backend logs; a redirect is not proof of activation. |
+| Google sign-in unavailable | Backend Google OAuth client ID/secret and exact callback URL. |
+| Google refuses access | OAuth consent audience, test users and redirect URI configuration. |
 | Model download failed | Retry in Settings; check connectivity and available storage. |
 | Searching finishes without a useful answer | Snippet relevance and local model quality. Try an explicit date or open the source links. |
 | Screenshot question fails | Vision download and capability verification must finish. |

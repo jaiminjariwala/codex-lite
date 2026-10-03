@@ -39,17 +39,13 @@ These are development screenshots recorded on September 13, 2026. They show the 
 - An embedded browser with its own navigation bar, plus terminal and code-review panels.
 - Saved chats and editable local memory.
 - Local Whisper dictation, image and document attachments, and video-frame input.
-- GitHub sign-in and a hosted Go backend connected to PostgreSQL.
-- A Stripe sandbox subscription demo that exercises checkout and access activation without a real payment.
+- Google and GitHub sign-in, an encrypted account chooser, and a hosted Go backend connected to PostgreSQL.
+- First-run setup with optional microphone and Accessibility permissions.
 - Light and dark themes, compact controls, and the rolling ball response animation.
 
-## The payment is a demo
+## Getting started
 
-The hosted demo uses Stripe sandbox. The displayed $1/month is a simulated subscription, not a charge to your bank account.
-
-Only on a checkout clearly marked as a sandbox or demo, use card `4242 4242 4242 4242`, a future expiry, and any three-digit CVC. Never enter a real card for this demo.
-
-GitHub sign-in and sandbox checkout have been tested against the hosted backend. This is separate from AI quality testing.
+Sign in with Google or GitHub in your browser, choose your account, and allow or skip microphone setup. There is no payment or upgrade step. The maintainer must configure the OAuth clients first; see [backend setup](docs/BACKEND.md).
 
 ## What runs where?
 
@@ -61,12 +57,12 @@ Your Mac
     |-- isolated browser -> Google / DuckDuckGo
     |
     +-- HTTPS -> Go backend on Render
+                    |-- Google OAuth
                     |-- GitHub OAuth
-                    |-- PostgreSQL on Supabase
-                    +-- Stripe sandbox + signed webhooks
+                    +-- PostgreSQL on Supabase
 ```
 
-The Go server handles identity and subscription state. It is not the machine running the local Qwen models. The desktop app never needs the database password, Stripe secret key, or GitHub client secret.
+The Go server handles identity and app sessions. It is not the machine running the local Qwen models. The desktop app never needs the database password or GitHub client secret.
 
 ## Things I am still improving
 
@@ -103,7 +99,7 @@ Source changes do not automatically update a previously downloaded DMG. Packagin
 
 ## Under the hood
 
-Electron, React, TypeScript, Monaco, Ollama, Qwen, Go, PostgreSQL, GitHub OAuth, and Stripe.
+Electron, React, TypeScript, Monaco, Ollama, Qwen, Go, PostgreSQL, Google OAuth, and GitHub OAuth.
 
 - [Architecture and data flows](docs/ARCHITECTURE.md)
 - [How it works in plain language](docs/HOW-IT-WORKS.md)

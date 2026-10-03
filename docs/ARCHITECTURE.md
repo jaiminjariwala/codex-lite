@@ -26,9 +26,8 @@ Current default desktop flow, September 2026. Older gateway and operator modules
                    | Go API on Render |
                    +--|------|-----|--+
                       |      |     |
-                 GitHub  Supabase  Stripe sandbox
-                  OAuth  PostgreSQL   |
-                                      +-- signed webhook -> Go
+                 GitHub  Supabase    Google
+                  OAuth  PostgreSQL  OAuth
 ```
 
 The browser and search also contact external websites directly from the Mac. Account hosting does not make local model inference a cloud operation.
@@ -82,8 +81,9 @@ Chat text is revealed progressively in the renderer. A DOM observer follows cont
 
 - Renderer code uses narrow preload APIs, not unrestricted Node access.
 - Model downloads and search are network operations even though inference is local.
-- Database, GitHub OAuth, and Stripe secrets belong only on the backend.
-- The webhook signature, not the browser return page, establishes billing events.
+- Database and GitHub OAuth secrets belong only on the backend.
+- Google/GitHub verify identity before Go issues a session. The renderer never receives tokens. Supabase is used only for PostgreSQL hosting.
+- Payment routes are removed. Legacy database columns are left unused to preserve existing data.
 - Experimental operator tools have their own safety and capability checks.
 - Local screenshot support does not enable every visual automation route.
 

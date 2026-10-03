@@ -1,6 +1,6 @@
 {
   "name": "computer-or-browser-use",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Codex Lite - an independent macOS chat and code workspace with experimental automation.",
   "main": "out/main/index.js",
   "author": "",
